@@ -2,18 +2,22 @@ services:
   pyroscope:
     image: grafana/pyroscope:1.12.0
     ports:
-    - 4040:4040
+      - 4040:4040
+    command:
+      - -usage-stats.enabled=false
+      - -self-profiling.disable-push=true
+      - -ingester.max-global-series-per-tenant=15000
   phpscope:
     image: hiload/phpscope:latest
     command:
-    - -pyroscopeUrl
-    - http://pyroscope:4040
-    - -appName
-    - php
-    - -exclude
-    - "<main>.*"
+      - -pyroscopeUrl
+      - http://pyroscope:4040
+      - -appName
+      - php
+      - -exclude
+      - "<main>.*"
     depends_on:
-    - pyroscope
+      - pyroscope
     pid: "host"
     cap_add:
       - SYS_PTRACE
