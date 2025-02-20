@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float64, batchLimit int, concurrentLimit int, tags map[string]string, excludePattern string) {
+func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float64, batchLimit int, concurrentLimit int, tags map[string]string, excludePattern string, debug bool) {
 
 	bannerLines := []string{
 		"    ____  __  ______  _____                    ",
@@ -22,10 +22,10 @@ func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float
 
 	// Print banner in orange color
 	for _, line := range bannerLines {
-		fmt.Println(line)
+		fmt.Println("\033[0;33m" + line + "\033[0m")
 	}
 
-	fmt.Println("https://github.com/everythings-gonna-be-alright\n")
+	fmt.Print("https://github.com/everythings-gonna-be-alright\n\n")
 
 	fmt.Println("🚀 Starting phpScope with configuration:")
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -44,25 +44,32 @@ func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float
 			fmt.Printf("   ├─ %s: %s\n", k, v)
 		}
 	}
+	fmt.Printf("🐛 Debug Mode:         %v\n", debug)
 	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
 }
 
 func main() {
-	pyroscopeURL := flag.String("pyroscopeUrl", "", "Url of the pyroscope server")
-	authToken := flag.String("auth", "", "Pyroscope Auth Token")
-	appName := flag.String("appName", "", "Name of app")
-	rateHz := flag.Int("rateHz", 400, "Sample rate in Hz")
-	// If you change interval, you broke time per sample!
-	interval := flag.Float64("interval", 0.1, "Maximum time between requests to pyroscope server")
-	batchLimit := flag.Int("batch", 50000, "Maximum number of traces in request")
-	concurrentLimit := flag.Int("concurrent", 1, "Concurrent request limit")
+	// Command line flags configuration
+	// Core settings
+	pyroscopeURL := flag.String("pyroscopeUrl", "", "URL of the Pyroscope server")
+	authToken := flag.String("auth", "", "Authentication token for Pyroscope")
+	appName := flag.String("appName", "", "Application name for profiling data")
 	excludeRegex := flag.String("exclude", "", "Regex pattern to exclude functions")
 	var tags multiFlag
 	flag.Var(&tags, "tags", "Tags in format key=value")
-	// Adding new parameters for phpspy
-	phpspyBufferSize := flag.Int("phpspyBufferSize", 131072, "phpspy buffer size")
-	phpspyMaxDepth := flag.Int("phpspyMaxDepth", 50000, "phpspy max stack depth")
-	phpspyThreads := flag.Int("phpspyThreads", 64, "phpspy threads count")
+
+	// Profiling settings
+	rateHz := flag.Int("rateHz", 400, "Sampling rate in Hz")
+	interval := flag.Float64("interval", 0.1, "Time between data sends (seconds)")
+	batchLimit := flag.Int("batch", 50000, "Maximum traces per batch")
+	concurrentLimit := flag.Int("concurrent", 1, "Maximum concurrent requests")
+
+	// PHP-specific settings
+	phpspyBufferSize := flag.Int("phpspyBufferSize", 131072, "Size of phpspy's internal buffer")
+	phpspyMaxDepth := flag.Int("phpspyMaxDepth", 50000, "Maximum stack trace depth")
+	phpspyThreads := flag.Int("phpspyThreads", 64, "Number of phpspy worker threads")
+
+	debug := flag.Bool("debug", false, "Enable debug logging")
 
 	flag.Parse()
 
@@ -84,7 +91,7 @@ func main() {
 	}
 
 	// Print welcome banner with configuration
-	printWelcomeBanner(*pyroscopeURL, *appName, *rateHz, *interval, *batchLimit, *concurrentLimit, tagMap, *excludeRegex)
+	printWelcomeBanner(*pyroscopeURL, *appName, *rateHz, *interval, *batchLimit, *concurrentLimit, tagMap, *excludeRegex, *debug)
 
 	// Initialize sender with new configuration
 	s := sender.New(sender.Config{
@@ -94,7 +101,10 @@ func main() {
 		RateHz:       *rateHz,
 	})
 
-	// Initialize processor with new parameters
+	// Set global debug flag
+	processor.Debug = *debug
+
+	// Initialize processor without debug in config
 	p := processor.New(processor.Config{
 		Interval:         *interval,
 		BatchLimit:       *batchLimit,
@@ -114,7 +124,8 @@ func main() {
 	}
 }
 
-// multiFlag implements flag.Value interface for multiple flag values
+// multiFlag implements flag.Value interface to support multiple flag values
+// for the same flag (e.g., multiple -tags flags)
 type multiFlag []string
 
 func (f *multiFlag) String() string {
@@ -126,6 +137,8 @@ func (f *multiFlag) Set(value string) error {
 	return nil
 }
 
+// parseTag splits a "key=value" string into separate key and value.
+// Returns empty strings if the format is invalid.
 func parseTag(tag string) (string, string) {
 	parts := strings.Split(tag, "=")
 	if len(parts) != 2 {

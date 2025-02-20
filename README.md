@@ -1,7 +1,8 @@
 # PHPScope
+
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://vshymanskyy.github.io/StandWithUkraine/)
 
-PHPScope is a PHP profiling tool that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
+PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures trought [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
 
 ## Features
 
@@ -26,42 +27,27 @@ You can either run PHPScope using Docker Compose or build it from source.
 
 ### Using Docker Compose
 
-1. Clone the repository:
    ```bash
    git clone https://github.com/everythings-gonna-be-alright/phpscope
-   ```
-
-2. Change to the project directory:
-   ```bash
    cd phpscope
-   ```
-
-3. Start the application using Docker Compose:
-   ```bash
    docker-compose up -d
    ```
 
 ### Building from Source
 
-1. Clone the repository:
    ```bash
    git clone https://github.com/everythings-gonna-be-alright/phpscope
-   ```
-
-2. Change to the project directory:
-   ```bash
    cd phpscope
-   ```
-
-3. Build the project:
-   ```bash
    go build
    ```
 
 ## Usage
 
 Basic usage example:
-./phpscope --pyroscopeUrl="http://pyroscope:4040" --appName="your-app-name"
+
+   ```bash
+   ./phpscope --pyroscopeUrl="http://pyroscope:4040" --appName="your-app-name"
+   ```
 
 ### Command Line Options
 
@@ -79,18 +65,21 @@ Basic usage example:
 | --phpspyBufferSize | 131072 | phpspy buffer size |
 | --phpspyMaxDepth | 50000 | phpspy max stack depth |
 | --phpspyThreads | 64 | phpspy threads count |
+| --debug | false | Enable debug logging |
 
 ## Example
 
 Profile a PHP application with custom tags and exclusion pattern:
 
-./phpscope \
-  --pyroscopeUrl="http://pyroscope:4040" \
-  --appName="my-php-app" \
-  --tags="environment=production" \
-  --tags="version=1.0" \
-  --exclude="vendor/*" \
-  --rateHz=100
+   ```bash
+   ./phpscope \
+     --pyroscopeUrl="http://pyroscope:4040" \
+     --appName="my-php-app" \
+     --tags="environment=production" \
+     --tags="version=1.0" \
+     --exclude="vendor/*" \
+     --rateHz=100
+   ```
 
 ## Contributing
 

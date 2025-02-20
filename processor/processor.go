@@ -15,39 +15,47 @@ import (
 	"github.com/google/pprof/profile"
 )
 
+// Debug controls global debug logging
+var Debug bool
+
+// Config holds the configuration for the profile processor
 type Config struct {
-	Interval         float64
-	RateHz           int
-	BatchLimit       int
-	ConcurrentLimit  int
-	Sender           sender.Sender
-	PluginPaths      []string
-	ExcludePattern   string
-	PhpspyBufferSize int
-	PhpspyMaxDepth   int
-	PhpspyThreads    int
+	Interval         float64       // Time between batch sends in seconds
+	RateHz           int           // Sampling rate in Hz
+	BatchLimit       int           // Maximum number of traces per batch
+	ConcurrentLimit  int           // Maximum number of concurrent requests
+	Sender           sender.Sender // Sender instance for sending profiles
+	PluginPaths      []string      // Paths to plugins (currently unused)
+	ExcludePattern   string        // Regex pattern for functions to exclude
+	PhpspyBufferSize int           // Size of phpspy's internal buffer
+	PhpspyMaxDepth   int           // Maximum stack trace depth
+	PhpspyThreads    int           // Number of phpspy worker threads
 }
 
+// Processor handles the collection and processing of PHP profiling data
 type Processor struct {
 	config      Config
-	bulkAmmount int
-	mu          sync.Mutex
+	bulkAmmount int        // Current number of traces in the batch
+	mu          sync.Mutex // Mutex for thread-safe counter updates
 }
 
+// StackFrame represents a single frame in a PHP stack trace
 type StackFrame struct {
-	Index     int
-	Method    string
-	File      string
-	StartLine int
+	Index     int    // Frame position in the stack (0 is most recent)
+	Method    string // Name of the PHP function/method
+	File      string // Source file path
+	StartLine int    // Line number in the source file
 }
 
+// Trace represents a complete PHP stack trace with metadata
 type Trace struct {
-	Frames            []StackFrame
-	Tags              map[string][]string
-	tsStartProcessing time.Time // Time of start processing (end of previous trace or start of processing of first trace)
-	tsEndProcessing   time.Time // Time of end processing (end of trace)
+	Frames            []StackFrame        // Stack frames in the trace
+	Tags              map[string][]string // Metadata tags for the trace
+	tsStartProcessing time.Time           // Start time of trace processing
+	tsEndProcessing   time.Time           // End time of trace processing
 }
 
+// Sample type configuration for the profiler
 var sampleTypeConfig = map[string]map[string]interface{}{
 	"cpu": {
 		"units":        "nanoseconds",
@@ -70,6 +78,7 @@ var sampleTypeConfig = map[string]map[string]interface{}{
 	// },
 }
 
+// New creates a new Processor instance with the given configuration
 func New(config Config) *Processor {
 	return &Processor{
 		config:      config,
@@ -77,13 +86,18 @@ func New(config Config) *Processor {
 	}
 }
 
+// Process starts the main processing pipeline:
+// 1. Collects traces from phpspy
+// 2. Processes traces in batches
+// 3. Converts traces to pprof format
+// 4. Sends profiles to Pyroscope
 func (p *Processor) Process() error {
-	// Create buffered channels for processing
-	traces := make(chan *Trace, p.config.BatchLimit*2) // Buffered channel
+	// Create buffered channels for processing pipeline
+	traces := make(chan *Trace, p.config.BatchLimit*2)
 	pprofProfiles := make(chan *profile.Profile, p.config.ConcurrentLimit)
 
 	var wg sync.WaitGroup
-	done := make(chan struct{}) // Channel for signaling completion
+	done := make(chan struct{})
 
 	// Start producer
 	wg.Add(1)
@@ -122,14 +136,14 @@ func (p *Processor) Process() error {
 	}
 }
 
+// Producer runs phpspy and collects stack traces
 func (p *Processor) producer(traces chan<- *Trace) {
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("phpspy --rate-hz=%d --pgrep='-x \"(php-fpm.*|^php$)\"' --buffer-size=%d --max-depth=%d --threads=%d --request-info=qcup",
 		p.config.RateHz,
 		p.config.PhpspyBufferSize,
 		p.config.PhpspyMaxDepth,
 		p.config.PhpspyThreads))
-	// cmd := exec.Command("sh", "-c", "while true; do sleep 10 && cat test.txt; done")
-	// Get stdout pipe
+
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		log.Fatalf("Error creating stdout pipe: %v\n", err)
@@ -151,8 +165,7 @@ func (p *Processor) producer(traces chan<- *Trace) {
 	scanner := bufio.NewScanner(stdout)
 
 	var currentTrace []string
-	// Important
-	log.Printf("L")
+
 	// End time of last trace
 	var lastTraceTime time.Time
 	firstTrace := true
@@ -190,6 +203,7 @@ func (p *Processor) producer(traces chan<- *Trace) {
 	}
 }
 
+// processTraces collects traces into batches and triggers processing
 func (p *Processor) processTraces(traces <-chan *Trace, pprofProfiles chan<- *profile.Profile) {
 	var tracesForProcessing []Trace
 
@@ -233,6 +247,7 @@ func (p *Processor) processTraces(traces <-chan *Trace, pprofProfiles chan<- *pr
 	}
 }
 
+// parseTrace converts phpspy output into a structured Trace
 func parseTrace(traces []string, excludePattern string) (*Trace, error) {
 	trace := Trace{
 		Frames: []StackFrame{},
@@ -278,15 +293,16 @@ func parseTrace(traces []string, excludePattern string) (*Trace, error) {
 	return &trace, nil
 }
 
+// processBatch converts a batch of traces into a pprof profile
 func (p *Processor) processBatch(traces []Trace, pprofProfiles chan<- *profile.Profile) {
-
-	ConvertTraceToPprof(traces, pprofProfiles, p.config.RateHz)
+	convertTraceToPprof(traces, pprofProfiles, p.config.RateHz)
 }
 
-func ConvertTraceToPprof(traces []Trace, pprofTraces chan<- *profile.Profile, sampleRate int) {
+// convertTraceToPprof converts PHP stack traces to pprof format
+// It calculates timing information and creates a profile.Profile
+func convertTraceToPprof(traces []Trace, pprofTraces chan<- *profile.Profile, sampleRate int) {
 	samplesCount := int64(len(traces))
 
-	// Check if there are traces
 	if samplesCount == 0 {
 		return
 	}
@@ -295,12 +311,14 @@ func ConvertTraceToPprof(traces []Trace, pprofTraces chan<- *profile.Profile, sa
 	lastSampleTime := traces[len(traces)-1].tsEndProcessing
 	actualDuration := lastSampleTime.Sub(firstSampleTime)
 
-	log.Printf("Batch stats: start=%v end=%v duration=%v samples=%d rate=%d/s",
-		firstSampleTime.Format(time.RFC3339Nano),
-		lastSampleTime.Format(time.RFC3339Nano),
-		actualDuration,
-		samplesCount,
-		sampleRate)
+	if Debug {
+		log.Printf("Batch stats: start=%v end=%v duration=%v samples=%d rate=%d/s",
+			firstSampleTime.Format(time.RFC3339Nano),
+			lastSampleTime.Format(time.RFC3339Nano),
+			actualDuration,
+			samplesCount,
+			sampleRate)
+	}
 
 	totalCPUTime := actualDuration.Nanoseconds()
 	timePerSample := totalCPUTime / samplesCount
@@ -384,6 +402,7 @@ func ConvertTraceToPprof(traces []Trace, pprofTraces chan<- *profile.Profile, sa
 	pprofTraces <- prof
 }
 
+// consumer receives pprof profiles and sends them to Pyroscope
 func (p *Processor) consumer(pprofProfiles <-chan *profile.Profile) {
 	for profile := range pprofProfiles {
 		if err := p.config.Sender.SendSample(profile, sampleTypeConfig); err != nil {
@@ -393,6 +412,7 @@ func (p *Processor) consumer(pprofProfiles <-chan *profile.Profile) {
 	log.Println("Sendet")
 }
 
+// refreshCounters resets the batch counters
 func (p *Processor) refreshCounters() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
