@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="900" height="500" version="1.1" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0,0 10,3.5 0,7" fill="#a0b4c8"/>
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="350" y="40" font-family="Arial" font-size="20" font-weight="bold" fill="#ffffff">PHPScope Architecture</text>
+  
+  <!-- Main Container -->
+  <rect x="100" y="60" width="700" height="400" fill="#1a2332" stroke="#2d3748" stroke-width="2" rx="10"/>
+  <text x="110" y="85" font-family="Arial" font-size="16" fill="#ffffff">PHPScope</text>
+  
+  <!-- PHP Processes -->
+  <g transform="translate(110,120)">
+  <rect width="160" height="60" fill="#2c5282" stroke="#4299e1" stroke-width="2" rx="5"/>
+  <text x="80" y="28" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff">PHP-FPM/CLI</text>
+  <text x="80" y="50" font-family="Arial" font-size="12" text-anchor="middle" fill="#e2e8f0">Running Processes</text>
+  </g>
+  
+  <!-- Collector -->
+  <g transform="translate(320,120)">
+    <rect width="160" height="60" fill="#744210" stroke="#ecc94b" stroke-width="2" rx="5"/>
+    <text x="80" y="28" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff"> 📦 Collector</text>
+    <text x="80" y="50" font-family="Arial" font-size="12" text-anchor="middle" fill="#e2e8f0">(phpspy)</text>
+    <text x="80" y="75" font-family="Arial" font-size="11" fill="#e2e8f0" text-anchor="middle">Captures stack traces</text>
+  </g>
+  
+  <!-- Processor -->
+  <g transform="translate(320,220)">
+    <rect width="160" height="60" fill="#276749" stroke="#48bb78" stroke-width="2" rx="5"/>
+    <text x="80" y="35" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff"> 🤔 Processor</text>
+    <text x="80" y="75" font-family="Arial" font-size="11" fill="#e2e8f0" text-anchor="middle">Filters + aggregates data</text>
+  </g>
+  
+  <!-- Converter -->
+  <g transform="translate(320,320)">
+    <rect width="160" height="60" fill="#975a16" stroke="#f6ad55" stroke-width="2" rx="5"/>
+    <text x="80" y="35" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff"> 🔄 Converter</text>
+    <text x="80" y="75" font-family="Arial" font-size="11" fill="#e2e8f0" text-anchor="middle">Converts to pprof format</text>
+  </g>
+  
+  <!-- Sender -->
+  <g transform="translate(540,320)">
+    <rect width="160" height="60" fill="#2a4365" stroke="#63b3ed" stroke-width="2" rx="5"/>
+    <text x="80" y="35" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff">📤 Sender</text>
+    <text x="80" y="75" font-family="Arial" font-size="11" fill="#e2e8f0" text-anchor="middle">Batches + sends data</text>
+  </g>
+  
+  <!-- Pyroscope -->
+  <g transform="translate(740,320)">
+    <rect width="160" height="60" fill="#702459" stroke="#ed64a6" stroke-width="2" rx="5"/>
+    <text x="80" y="35" font-family="Arial" font-size="14" text-anchor="middle" fill="#ffffff">📈 Pyroscope</text>
+  </g>
+
+  <!-- Data Flow Arrows -->
+  <line x1="270" y1="150" x2="320" y2="150" stroke="#a0b4c8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="400" y1="180" x2="400" y2="220" stroke="#a0b4c8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="400" y1="280" x2="400" y2="320" stroke="#a0b4c8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="700" y1="350" x2="740" y2="350" stroke="#a0b4c8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="350" x2="540" y2="350" stroke="#a0b4c8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Legend -->
+  <g transform="translate(120,420)">
+    <text x="0" y="0" font-family="Arial" font-size="12" fill="#ffffff">Data flow:</text>
+    <text x="0" y="20" font-family="Arial" font-size="11" fill="#e2e8f0">1. Raw stack traces</text>
+    <text x="0" y="35" font-family="Arial" font-size="11" fill="#e2e8f0">2. Filtered traces</text>
+    <text x="150" y="20" font-family="Arial" font-size="11" fill="#e2e8f0">3. Converted pprof data</text>
+    <text x="150" y="35" font-family="Arial" font-size="11" fill="#e2e8f0">4. Batched metrics</text>
+  </g>
+</svg> 

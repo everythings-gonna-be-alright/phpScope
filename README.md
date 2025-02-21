@@ -14,6 +14,17 @@ PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpsp
 - Function exclusion patterns
 - Concurrent processing support ( WIP )
 
+## Architecture
+
+![PHPScope Architecture](docs/architecture.svg)
+
+The diagram above shows the main components of PHPScope:
+
+1. **Collector (phpspy)**: Captures stack traces from PHP processes
+2. **Processor**: Processes and filters the raw stack traces
+3. **Converter**: Converts traces to Pyroscope-compatible format
+4. **Sender**: Handles communication with Pyroscope server
+
 ## Prerequisites
 
 - Go 1.23.3 or higher
