@@ -71,6 +71,7 @@ func main() {
 	flag.IntVar(&cfg.PhpspyBufferSize, "phpspyBufferSize", cfg.PhpspyBufferSize, "Size of phpspy's internal buffer")
 	flag.IntVar(&cfg.PhpspyMaxDepth, "phpspyMaxDepth", cfg.PhpspyMaxDepth, "Maximum stack trace depth")
 	flag.IntVar(&cfg.PhpspyThreads, "phpspyThreads", cfg.PhpspyThreads, "Number of phpspy worker threads")
+	flag.StringVar(&cfg.PhpspyRequestInfo, "phpspyRequestInfo", cfg.PhpspyRequestInfo, "Request info to include in traces")
 
 	flag.BoolVar(&cfg.Debug, "debug", false, "Enable debug logging")
 
