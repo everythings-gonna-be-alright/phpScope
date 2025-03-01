@@ -25,7 +25,7 @@ func New(cfg *config.Config) *PhpSpy {
 // Returns a channel that will receive parsed traces and any error that occurred
 func (ps *PhpSpy) Start() (<-chan *Trace, error) {
 	// Construct phpspy command with configuration parameters
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("phpspy --rate-hz=%d --pgrep='-x \"(php-fpm.*|^php$)\"' --buffer-size=%d --max-depth=%d --threads=%d --request-info=%d",
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("phpspy --rate-hz=%d --pgrep='-x \"(php-fpm.*|^php$)\"' --buffer-size=%d --max-depth=%d --threads=%d --request-info=%s",
 		ps.config.RateHz,
 		ps.config.PhpspyBufferSize,
 		ps.config.PhpspyMaxDepth,
