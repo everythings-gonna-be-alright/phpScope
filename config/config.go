@@ -21,6 +21,7 @@ type Config struct {
 	PhpspyMaxDepth    int
 	PhpspyThreads     int
 	PhpspyRequestInfo string
+	PhpspyPgrep       string
 }
 
 // NewDefault returns a new default config
@@ -34,5 +35,6 @@ func NewDefault() *Config {
 		PhpspyMaxDepth:    -1,
 		PhpspyThreads:     64,
 		PhpspyRequestInfo: "qcup",
+		PhpspyPgrep:       `-x "(php-fpm.*|^php$)"`,
 	}
 }

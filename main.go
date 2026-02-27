@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float64, batchLimit int, concurrentLimit int, tags map[string]string, excludePattern string, debug bool) {
+func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float64, batchLimit int, concurrentLimit int, tags map[string]string, excludePattern string, pgrepPattern string, debug bool) {
 
 	bannerLines := []string{
 		"    ____  __  ______  _____                    ",
@@ -36,6 +36,7 @@ func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float
 	fmt.Printf("⏱️  Update Interval:    %.2f sec\n", interval)
 	fmt.Printf("📦 Batch Limit:        %d\n", batchLimit)
 	fmt.Printf("🔄 Concurrent Limit:   %d\n", concurrentLimit)
+	fmt.Printf("🔍 Process Filter:     %s\n", pgrepPattern)
 	if excludePattern != "" {
 		fmt.Printf("🚫 Exclude Pattern:    %s\n", excludePattern)
 	}
@@ -72,6 +73,7 @@ func main() {
 	flag.IntVar(&cfg.PhpspyMaxDepth, "phpspyMaxDepth", cfg.PhpspyMaxDepth, "Maximum stack trace depth")
 	flag.IntVar(&cfg.PhpspyThreads, "phpspyThreads", cfg.PhpspyThreads, "Number of phpspy worker threads")
 	flag.StringVar(&cfg.PhpspyRequestInfo, "phpspyRequestInfo", cfg.PhpspyRequestInfo, "Request info to include in traces")
+	flag.StringVar(&cfg.PhpspyPgrep, "pgrep", cfg.PhpspyPgrep, "pgrep pattern for finding PHP processes")
 
 	flag.BoolVar(&cfg.Debug, "debug", false, "Enable debug logging")
 
@@ -96,7 +98,7 @@ func main() {
 	}
 
 	// Print welcome banner
-	printWelcomeBanner(cfg.PyroscopeURL, cfg.AppName, cfg.RateHz, cfg.Interval, cfg.BatchLimit, cfg.ConcurrentLimit, cfg.Tags, cfg.ExcludePattern, cfg.Debug)
+	printWelcomeBanner(cfg.PyroscopeURL, cfg.AppName, cfg.RateHz, cfg.Interval, cfg.BatchLimit, cfg.ConcurrentLimit, cfg.Tags, cfg.ExcludePattern, cfg.PhpspyPgrep, cfg.Debug)
 
 	// Initialize components
 	s := sender.New(cfg)
