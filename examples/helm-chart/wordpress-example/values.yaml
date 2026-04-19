@@ -1,0 +1,239 @@
+replicaCount: 1
+
+image:
+  repository: wordpress
+  pullPolicy: IfNotPresent
+  tag: "php8.3-fpm"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  fsGroup: 33
+  seccompProfile:
+    type: RuntimeDefault
+
+shareProcessNamespace: true
+
+# WordPress FPM runs as www-data (UID/GID 33) — no root needed.
+phpSecurityContext:
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 33
+  runAsGroup: 33
+
+# nginx sidecar — needs root to bind port 80, drops to worker user internally.
+nginxSecurityContext:
+  capabilities:
+    drop: [ALL]
+    add:
+      - CHOWN
+      - NET_BIND_SERVICE
+      - SETUID
+      - SETGID
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: true
+  runAsNonRoot: false
+  runAsUser: 0
+
+nginx:
+  image: "nginx:1.27-alpine"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Extra env vars injected into the WordPress container.
+# DB connection is auto-populated from mysql section below.
+phpEnv: []
+
+phpscope:
+  image:
+    repository: hiload/phpscope
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  securityContext:
+    capabilities:
+      drop: [ALL]
+      add: [SYS_PTRACE]
+    allowPrivilegeEscalation: true
+    readOnlyRootFilesystem: false
+    runAsNonRoot: false
+    runAsUser: 0
+    seccompProfile:
+      type: Unconfined
+    appArmorProfile:
+      type: Unconfined
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  config:
+    pyroscopeUrl: "http://pyroscope.monitoring.svc.cluster.local:4040"
+    appName: "wordpress"
+    authToken: ""
+    rateHz: 400
+    interval: "0.1"
+    batchLimit: 50000
+    excludePattern: ""
+    pgrepPattern: '-x "php-fpm.*"'
+    tags:
+      - env=production
+      - app=wordpress
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: nginx-internal
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: wordpress.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: wordpress-tls
+      hosts:
+        - wordpress.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - wordpress-example
+          topologyKey: kubernetes.io/hostname
+
+livenessProbe:
+  path: /
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+networkPolicy:
+  enabled: true
+  pyroscopeNamespace: monitoring
+
+phpVolumeMounts:
+  - name: wordpress-files
+    mountPath: /var/www/html
+  - name: tmp
+    mountPath: /tmp
+
+mysql:
+  enabled: true
+  imageTag: "8.4.8"
+  rootPassword: "changeme-root"
+  database: "wordpress"
+  user: "wordpress"
+  password: "changeme"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  persistence:
+    enabled: false
+    size: 10Gi
+    storageClass: ""
+  podSecurityContext:
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    capabilities:
+      drop: [ALL]
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    runAsNonRoot: true
+    runAsUser: 999
+
+pyroscope:
+  enabled: true
+  pyroscope:
+    replicaCount: 1
+    image:
+      repository: grafana/pyroscope
+      pullPolicy: IfNotPresent
+      tag: ""
+    extraArgs:
+      log.level: warn
+      -usage-stats.enabled: "false"
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+    persistence:
+      enabled: false
+      size: 10Gi
+    podSecurityContext:
+      fsGroup: 10001
+      runAsUser: 10001
+      runAsNonRoot: true
+    securityContext:
+      capabilities:
+        drop: [ALL]
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      runAsNonRoot: true
+      runAsUser: 10001
+    service:
+      type: ClusterIP
+      port: 4040
+      port_name: http2

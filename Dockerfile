@@ -1,4 +1,4 @@
-FROM golang:1.23.3-alpine AS builder
+FROM golang:1.26.2-alpine3.23 AS builder
 
 RUN apk add --no-cache git
 
@@ -14,7 +14,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o phpscope .
 
-FROM alpine:3.21 AS phpspy
+FROM alpine:3.23 AS phpspy
 
 # Install phpspy
 RUN apk add --no-cache git make gcc g++ libc-dev && \

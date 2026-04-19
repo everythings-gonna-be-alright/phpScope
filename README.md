@@ -2,7 +2,7 @@
 
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner2-direct.svg)](https://vshymanskyy.github.io/StandWithUkraine/)
 
-PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures trought [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
+PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures through [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
 
 ## Features
 
@@ -27,10 +27,10 @@ The diagram above shows the main components of PHPScope:
 
 ## Prerequisites
 
-- Go 1.23.3 or higher
+- Go 1.26.2 or higher
 - PHP-FPM or PHP CLI processes running ( Tested on PHP 8.3 )
 - Access to a Pyroscope server
-- phpspy installed on the system ( Incuded in docker container )
+- phpspy installed on the system ( Included in docker container )
 
 ## Installation
 
@@ -39,14 +39,46 @@ You can either run PHPScope using Docker Compose or build it from source.
 ### Using Docker Compose
 
    ```shell
-   curl -sSL https://raw.githubusercontent.com/everythings-gonna-be-alright/phpScope/refs/heads/main/docker-compose.yaml | docker compose -f - up -d
+   curl -sSL https://raw.githubusercontent.com/everythings-gonna-be-alright/phpScope/refs/heads/main/examples/docker-compose/docker-compose.yaml | docker compose -f - up -d
    ```
+
+Once running, PHPScope will automatically discover and profile all PHP processes (PHP-FPM and PHP CLI) running on the host — including those inside Docker containers — and continuously stream profiling data to the bundled Pyroscope instance.
 
 After installation, you can access the Pyroscope UI at:
 
    ```shell
    http://127.0.0.1:4040
    ```
+
+### Deploying on Kubernetes (Helm)
+
+For Kubernetes environments, the recommended approach is to run PHPScope as a **sidecar container** alongside your PHP application pod. This gives PHPScope direct access to the PHP processes within the same pod namespace without requiring host-level privileges beyond the pod boundary.
+
+A Helm chart example is available in [`examples/helm-chart/wordpress-example`](examples/helm-chart/wordpress-example). It includes a full deployment with PHPScope as a sidecar, Pyroscope as a subchart dependency, NetworkPolicy, and all required RBAC resources.
+
+   ```shell
+   git clone https://github.com/everythings-gonna-be-alright/phpScope
+   cd phpScope/
+
+   # Install into your cluster
+   helm upgrade --install wordpress-example examples/helm-chart/wordpress-example/ \
+     --namespace wordpress-example \
+     --create-namespace
+   ```
+
+Once installed, use port-forwarding to access the services locally:
+
+   ```shell
+   # Pyroscope UI
+   kubectl port-forward -n wordpress-example svc/wordpress-example-pyroscope 4040:4040
+
+   # WordPress
+   kubectl port-forward -n wordpress-example svc/wordpress-example 8080:8080
+   ```
+
+Then open:
+- Pyroscope UI: `http://localhost:4040`
+- WordPress: `http://localhost:8080`
 
 ### Building from Source
 
@@ -66,21 +98,23 @@ Basic usage example:
 
 ### Command Line Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| --pyroscopeUrl | required | URL of the Pyroscope server |
-| --auth | "" | Pyroscope authentication token |
-| --appName | required | Application name for profiling |
-| --rateHz | 400 | Sample rate in Hz |
-| --interval | 0.1 | Maximum time between requests to Pyroscope server |
-| --batch | 50000 | Maximum number of traces in request |
-| --concurrent | 1 | Concurrent request limit |
-| --exclude | "" | Regex pattern to exclude functions |
-| --tags | [] | Tags in format key=value |
-| --phpspyBufferSize | 131072 | phpspy buffer size |
-| --phpspyMaxDepth | 50000 | phpspy max stack depth |
-| --phpspyThreads | 64 | phpspy threads count |
-| --debug | false | Enable debug logging |
+| Option              | Default                   | Description                                       |
+|---------------------|---------------------------|---------------------------------------------------|
+| --pyroscopeUrl      | required                  | URL of the Pyroscope server                       |
+| --auth              | ""                        | Pyroscope authentication token                    |
+| --appName           | required                  | Application name for profiling                    |
+| --rateHz            | 400                       | Sample rate in Hz                                 |
+| --interval          | 0.1                       | Maximum time between requests to Pyroscope server |
+| --batch             | 50000                     | Maximum number of traces in request               |
+| --concurrent        | 1                         | Concurrent request limit                          |
+| --exclude           | ""                        | Regex pattern to exclude functions                |
+| --tags              | []                        | Tags in format key=value                          |
+| --phpspyBufferSize  | 131072                    | phpspy buffer size                                |
+| --phpspyMaxDepth    | -1                        | phpspy max stack depth (-1 = unlimited)           |
+| --phpspyThreads     | 64                        | phpspy threads count                              |
+| --phpspyRequestInfo | qcup                      | Request info fields included in traces            |
+| --pgrep             | `-x "(php-fpm.*\|^php$)"` | pgrep pattern for finding PHP processes           |
+| --debug             | false                     | Enable debug logging                              |
 
 ## Example
 

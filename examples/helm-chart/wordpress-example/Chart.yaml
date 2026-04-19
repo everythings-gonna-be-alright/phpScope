@@ -1,0 +1,19 @@
+apiVersion: v2
+name: wordpress-example
+description: WordPress + MySQL + phpScope profiling sidecar + Grafana Pyroscope
+type: application
+version: 0.1.0
+appVersion: "php8.3-apache"
+keywords:
+  - wordpress
+  - mysql
+  - php
+  - phpscope
+  - pyroscope
+maintainers:
+  - name: everything-gonna-be-alright
+dependencies:
+  - name: pyroscope
+    version: "1.21.0"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: pyroscope.enabled
