@@ -17,10 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pyroscope image in Docker Compose updated: `1.12.0` → `1.21.0`
 - `github.com/google/pprof` dependency updated to `v0.0.0-20260402051712-545e8a4df936`
 
-### Fixed
-- Typos in README (`trought` → `through`, `Incuded` → `Included`)
-- README Go version prerequisite corrected to `1.26.2`
-
 ## [v0.1.2] - 2025-04-11
 
 ### Added
