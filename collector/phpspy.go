@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // New creates a new PhpSpy instance with the provided configuration
@@ -121,9 +120,7 @@ func (ps *PhpSpy) parseTrace(traces []string) (*Trace, error) {
 
 	// Process each line of the trace
 	for _, line := range traces {
-		if !utf8.ValidString(line) {
-			return nil, fmt.Errorf("dropping trace with invalid UTF-8 (torn phpspy read)")
-		}
+		line = strings.ToValidUTF8(line, "\uFFFD")
 		if matches := frameRegex.FindStringSubmatch(line); matches != nil {
 			// Skip frames matching exclude pattern
 			if excludeRegex != nil && excludeRegex.MatchString(line) {
