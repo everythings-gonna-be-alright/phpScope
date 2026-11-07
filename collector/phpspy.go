@@ -120,6 +120,7 @@ func (ps *PhpSpy) parseTrace(traces []string) (*Trace, error) {
 
 	// Process each line of the trace
 	for _, line := range traces {
+		line = strings.ToValidUTF8(line, "\uFFFD")
 		if matches := frameRegex.FindStringSubmatch(line); matches != nil {
 			// Skip frames matching exclude pattern
 			if excludeRegex != nil && excludeRegex.MatchString(line) {
