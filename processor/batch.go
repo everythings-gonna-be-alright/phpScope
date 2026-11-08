@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -16,9 +15,10 @@ import (
 // 2. The time interval has elapsed (config.Interval seconds)
 func (p *Processor) processTraces(traces <-chan *collector.Trace, pprofProfiles chan<- *profile.Profile) {
 	var tracesForProcessing []collector.Trace
+	interval := p.interval()
 
 	// Create timer for periodic batch processing
-	timer := time.NewTimer(time.Duration(p.config.Interval) * time.Second)
+	timer := time.NewTimer(interval)
 	defer timer.Stop()
 
 	for {
@@ -34,18 +34,11 @@ func (p *Processor) processTraces(traces <-chan *collector.Trace, pprofProfiles 
 
 			tracesForProcessing = append(tracesForProcessing, *trace)
 
-			// Track number of traces in current batch
-			p.mu.Lock()
-			p.bulkAmount++
-			currentBulkAmount := p.bulkAmount
-			p.mu.Unlock()
-
 			// Process batch if size limit reached
-			if currentBulkAmount >= p.config.BatchLimit {
+			if len(tracesForProcessing) >= p.config.BatchLimit {
 				p.processBatch(tracesForProcessing, pprofProfiles)
 				tracesForProcessing = nil
-				p.refreshCounters()
-				timer.Reset(time.Duration(p.config.Interval) * time.Second)
+				timer.Reset(interval)
 			}
 
 		case <-timer.C:
@@ -53,13 +46,16 @@ func (p *Processor) processTraces(traces <-chan *collector.Trace, pprofProfiles 
 			if len(tracesForProcessing) > 0 {
 				p.processBatch(tracesForProcessing, pprofProfiles)
 				tracesForProcessing = nil
-				p.refreshCounters()
 			}
 			// Add small buffer to interval to avoid exact timing conflicts
-			nextInterval := time.Duration(p.config.Interval)*time.Second + 100*time.Millisecond
-			timer.Reset(nextInterval)
+			timer.Reset(interval + 100*time.Millisecond)
 		}
 	}
+}
+
+// interval converts the configured fractional seconds into a time.Duration.
+func (p *Processor) interval() time.Duration {
+	return time.Duration(p.config.Interval * float64(time.Second))
 }
 
 // processBatch converts a batch of collected traces into a pprof profile format
@@ -73,18 +69,10 @@ func (p *Processor) processBatch(traces []collector.Trace, pprofProfiles chan<- 
 // consumer receives converted pprof profiles from the channel and sends them
 // to Pyroscope server using the configured sender
 func (p *Processor) consumer(pprofProfiles <-chan *profile.Profile) {
-	for profile := range pprofProfiles {
-		if err := p.sender.SendSample(profile, converter.SampleTypeConfig); err != nil {
-			fmt.Printf("Error sending sample: %v\n", err)
+	for prof := range pprofProfiles {
+		if err := p.sender.SendSample(prof, converter.SampleTypeConfig); err != nil {
+			log.Printf("Error sending sample: %v\n", err)
 		}
 	}
 	log.Println("Sent")
-}
-
-// refreshCounters resets the batch counters under mutex protection
-// Called after each batch is processed
-func (p *Processor) refreshCounters() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.bulkAmount = 0
 }

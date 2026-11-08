@@ -9,12 +9,16 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 	"time"
 
 	"phpScope/config"
 
 	"github.com/google/pprof/profile"
 )
+
+const maxErrorBodySize = 4096
 
 // Sender handles sending profiling data to Pyroscope server
 type Sender struct {
@@ -93,7 +97,7 @@ func (s *Sender) SendSample(pprofTraces *profile.Profile, sampleTypeConfig map[s
 
 	// Prepare request URL and parameters
 	params := url.Values{}
-	params.Set("name", s.config.AppName)
+	params.Set("name", s.appName())
 	url := fmt.Sprintf("%s/ingest?%s", s.config.PyroscopeURL, params.Encode())
 
 	// Create and configure HTTP request
@@ -115,7 +119,7 @@ func (s *Sender) SendSample(pprofTraces *profile.Profile, sampleTypeConfig map[s
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
 		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -125,4 +129,24 @@ func (s *Sender) SendSample(pprofTraces *profile.Profile, sampleTypeConfig map[s
 	}
 
 	return nil
+}
+
+// appName returns the Pyroscope application name with static tags appended
+// in the "app{k1=v1,k2=v2}" format, keys sorted for a stable series identity.
+func (s *Sender) appName() string {
+	if len(s.config.Tags) == 0 {
+		return s.config.AppName
+	}
+
+	keys := make([]string, 0, len(s.config.Tags))
+	for k := range s.config.Tags {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	pairs := make([]string, len(keys))
+	for i, k := range keys {
+		pairs[i] = k + "=" + s.config.Tags[k]
+	}
+	return s.config.AppName + "{" + strings.Join(pairs, ",") + "}"
 }

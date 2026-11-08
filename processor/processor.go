@@ -3,22 +3,18 @@ package processor
 import (
 	"phpScope/collector"
 	"phpScope/config"
-	"phpScope/sender"
 
 	"sync"
 
 	"github.com/google/pprof/profile"
 )
 
-
-
 // New creates a new Processor instance with the given configuration and sender.
 // The sender is responsible for transmitting profiles to the Pyroscope server.
-func New(cfg *config.Config, sender *sender.Sender) *Processor {
+func New(cfg *config.Config, sender profileSender) *Processor {
 	return &Processor{
-		config:     cfg,
-		sender:     sender,
-		bulkAmount: 0,
+		config: cfg,
+		sender: sender,
 	}
 }
 
@@ -28,42 +24,40 @@ func New(cfg *config.Config, sender *sender.Sender) *Processor {
 // 3. Starts a consumer to send profiles to Pyroscope
 // Returns an error if the collector fails to start
 func (p *Processor) Process() error {
-	collector := collector.New(p.config)
-	traces, err := collector.Start()
+	traces, err := collector.New(p.config).Start()
 	if err != nil {
 		return err
 	}
+	p.run(traces)
+	return nil
+}
 
+// run batches traces into profiles and sends them until traces is closed and
+// every pending profile has been handed to the sender.
+func (p *Processor) run(traces <-chan *collector.Trace) {
 	// Channel for passing converted pprof profiles between processors and consumer
 	pprofProfiles := make(chan *profile.Profile, p.config.ConcurrentLimit)
-	var wg sync.WaitGroup
-	done := make(chan struct{})
 
 	// Start multiple trace processors based on ConcurrentLimit
 	// Each processor handles batching and converting traces to pprof format
+	var producers sync.WaitGroup
 	for i := 0; i < p.config.ConcurrentLimit; i++ {
-		wg.Add(1)
+		producers.Add(1)
 		go func() {
-			defer wg.Done()
+			defer producers.Done()
 			p.processTraces(traces, pprofProfiles)
 		}()
 	}
 
 	// Start a single consumer that receives converted profiles
 	// and sends them to the Pyroscope server
-	wg.Add(1)
+	consumerDone := make(chan struct{})
 	go func() {
-		defer wg.Done()
-		defer close(pprofProfiles)
+		defer close(consumerDone)
 		p.consumer(pprofProfiles)
 	}()
 
-	// Wait for all goroutines to complete
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	<-done
-	return nil
+	producers.Wait()
+	close(pprofProfiles)
+	<-consumerDone
 }

@@ -2,11 +2,22 @@ services:
   pyroscope:
     image: grafana/pyroscope:1.21.0
     ports:
-      - 4040:4040
+      - "127.0.0.1:4040:4040"
     command:
       - -usage-stats.enabled=false
       - -self-profiling.disable-push=true
       - -ingester.max-global-series-per-tenant=15000
+    healthcheck:
+      test: ["CMD", "/usr/bin/profilecli", "ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
   phpscope:
     image: hiload/phpscope:latest
     command:
@@ -16,10 +27,18 @@ services:
       - php
       - -exclude
       - "<main>.*"
+      - -tags
+      - env=docker-compose
     depends_on:
-      - pyroscope
+      pyroscope:
+        condition: service_healthy
     pid: "host"
+    read_only: true
+    cap_drop:
+      - ALL
     cap_add:
       - SYS_PTRACE
     security_opt:
       - apparmor=unconfined
+      - no-new-privileges:true
+    restart: unless-stopped

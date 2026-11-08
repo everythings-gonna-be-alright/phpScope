@@ -3,7 +3,7 @@ name: wordpress-example
 description: WordPress + MySQL + phpScope profiling sidecar + Grafana Pyroscope
 type: application
 version: 0.1.0
-appVersion: "php8.3-apache"
+appVersion: "7.1.4-php8.5-fpm"
 keywords:
   - wordpress
   - mysql

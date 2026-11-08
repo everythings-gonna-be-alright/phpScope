@@ -2,13 +2,16 @@ package collector
 
 import (
 	"phpScope/config"
+	"regexp"
 	"time"
 )
 
 type PhpSpy struct {
-	config  *config.Config
-	traces  chan *Trace
-	stopped chan struct{}
+	config       *config.Config
+	excludeRegex *regexp.Regexp
+	sampleLabels map[string]bool
+	traces       chan *Trace
+	stopped      chan struct{}
 }
 
 // Trace represents a complete PHP stack trace with metadata

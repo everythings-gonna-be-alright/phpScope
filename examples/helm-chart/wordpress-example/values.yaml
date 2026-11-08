@@ -3,7 +3,8 @@ replicaCount: 1
 image:
   repository: wordpress
   pullPolicy: IfNotPresent
-  tag: "php8.3-fpm"
+  # Defaults to the chart appVersion (WordPress 7.1.4 on PHP 8.5 FPM).
+  tag: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -27,28 +28,24 @@ shareProcessNamespace: true
 phpSecurityContext:
   capabilities:
     drop: [ALL]
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
   runAsNonRoot: true
   runAsUser: 33
   runAsGroup: 33
 
-# nginx sidecar — needs root to bind port 80, drops to worker user internally.
+# Unprivileged nginx listens on service.port (>1024) as UID 101 — no root or capabilities needed.
 nginxSecurityContext:
   capabilities:
     drop: [ALL]
-    add:
-      - CHOWN
-      - NET_BIND_SERVICE
-      - SETUID
-      - SETGID
-  readOnlyRootFilesystem: false
-  allowPrivilegeEscalation: true
-  runAsNonRoot: false
-  runAsUser: 0
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
 
 nginx:
-  image: "nginx:1.27-alpine"
+  image: "nginxinc/nginx-unprivileged:1.30.6-alpine"
   resources:
     limits:
       cpu: 200m
@@ -70,12 +67,12 @@ phpscope:
     capabilities:
       drop: [ALL]
       add: [SYS_PTRACE]
-    allowPrivilegeEscalation: true
-    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     runAsNonRoot: false
     runAsUser: 0
     seccompProfile:
-      type: Unconfined
+      type: RuntimeDefault
     appArmorProfile:
       type: Unconfined
   resources:
@@ -94,6 +91,11 @@ phpscope:
     batchLimit: 50000
     excludePattern: ""
     pgrepPattern: '-x "php-fpm.*"'
+    # phpspy request info to capture: q=query string, c=cookie, u=uri, p=path.
+    requestInfo: "p"
+    # Trace fields sent as per-sample labels. Every distinct value is a new
+    # Pyroscope series, and cookie/qstring may contain secrets.
+    sampleLabels: "path"
     tags:
       - env=production
       - app=wordpress
@@ -143,16 +145,18 @@ affinity:
                   - wordpress-example
           topologyKey: kubernetes.io/hostname
 
+# Liveness checks that PHP-FPM accepts connections; it must not depend on the database.
 livenessProbe:
-  path: /
-  initialDelaySeconds: 60
+  initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
   successThreshold: 1
   failureThreshold: 3
 
+# Readiness renders a page through nginx -> PHP-FPM -> MySQL.
 readinessProbe:
-  initialDelaySeconds: 30
+  path: /wp-login.php
+  initialDelaySeconds: 10
   periodSeconds: 5
   timeoutSeconds: 3
   successThreshold: 1
@@ -161,6 +165,15 @@ readinessProbe:
 networkPolicy:
   enabled: true
   pyroscopeNamespace: monitoring
+  # HTTPS egress for WordPress (updates, plugins). Private ranges and the
+  # link-local cloud metadata endpoint (169.254.169.254) are excluded.
+  internetEgress:
+    enabled: true
+    except:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16
 
 phpVolumeMounts:
   - name: wordpress-files
@@ -170,11 +183,12 @@ phpVolumeMounts:
 
 mysql:
   enabled: true
-  imageTag: "8.4.8"
-  rootPassword: "changeme-root"
+  imageTag: "8.4.13"
+  # Leave empty to generate random passwords on install; they are kept on upgrade.
+  rootPassword: ""
   database: "wordpress"
   user: "wordpress"
-  password: "changeme"
+  password: ""
   resources:
     limits:
       cpu: 500m
@@ -203,6 +217,9 @@ mysql:
 
 pyroscope:
   enabled: true
+  # phpScope pushes profiles directly; the bundled Alloy agent and its cluster-wide RBAC are not needed.
+  alloy:
+    enabled: false
   pyroscope:
     replicaCount: 1
     image:
