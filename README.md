@@ -97,23 +97,23 @@ Then open:
 
 ## Security recommendations
 
-### Run without root
+### Run with minimal privileges
 
-The Helm example runs PHPScope as non-root (UID/GID 33, the same as PHP-FPM's `www-data`) with every capability dropped, a read-only root filesystem, `allowPrivilegeEscalation: false` and the default seccomp profile. phpspy can attach to processes of the same user, so neither root nor `SYS_PTRACE` is needed. The e2e suite runs this configuration and verifies that every request is profiled.
+PHPScope needs to ptrace the PHP-FPM workers. The Helm example runs it as root with every capability dropped except `SYS_PTRACE`, a read-only root filesystem, `allowPrivilegeEscalation: false` and the default seccomp profile. This works on every kernel.
 
-This depends on the node kernel. With `kernel.yama.ptrace_scope` of 1 or higher (the Ubuntu default) a process may only trace its own descendants, so the same-UID sidecar is denied. Either set `ptrace_scope` to 0 on those nodes, or run PHPScope as root with only the `SYS_PTRACE` capability:
+A non-root setup is possible when the PHPScope sidecar uses the same UID/GID as PHP-FPM (`www-data` is 33 in the official images) and the node allows same-user tracing, that is `kernel.yama.ptrace_scope=0`:
 
    ```yaml
    phpscope:
      securityContext:
-       runAsNonRoot: false
-       runAsUser: 0
+       runAsNonRoot: true
+       runAsUser: 33
+       runAsGroup: 33
        capabilities:
          drop: [ALL]
-         add: [SYS_PTRACE]
    ```
 
-If your PHP image does not use UID 33, set `runAsUser` and `runAsGroup` to its UID and GID. The Docker Compose example profiles processes of other containers and host processes, so it keeps `SYS_PTRACE` and runs as root.
+This was verified with the e2e suite on a kind cluster on Docker Desktop (all requests profiled). It does not work where `ptrace_scope` is 1 or higher, which is the Ubuntu default and what GitHub-hosted runners use: phpspy is denied, nothing is profiled and phpScope logs no error. Unprivileged containers cannot gain `SYS_PTRACE` as an effective capability, so there is no non-root option on those nodes unless you set `ptrace_scope` to 0. Check `sysctl kernel.yama.ptrace_scope` on your nodes before switching. The Docker Compose example profiles processes of other containers and the host, so it keeps `SYS_PTRACE` and runs as root.
 
 ### Verify downloads
 

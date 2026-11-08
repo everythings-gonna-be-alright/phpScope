@@ -63,17 +63,18 @@ phpscope:
     repository: hiload/phpscope
     pullPolicy: IfNotPresent
     tag: "latest"
-  # Runs as the same UID/GID as PHP-FPM (www-data), which lets phpspy ptrace the
-  # workers without root or capabilities. Nodes with kernel.yama.ptrace_scope >= 1
-  # (Ubuntu default) block this; there run as root with capabilities.add: [SYS_PTRACE].
+  # root with only SYS_PTRACE works on every kernel. On nodes with
+  # kernel.yama.ptrace_scope=0 phpScope can instead run as PHP-FPM's UID/GID
+  # (runAsNonRoot: true, runAsUser: 33, runAsGroup: 33, no capabilities); on
+  # nodes with ptrace_scope >= 1 (Ubuntu default) that setup profiles nothing.
   securityContext:
     capabilities:
       drop: [ALL]
+      add: [SYS_PTRACE]
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
-    runAsNonRoot: true
-    runAsUser: 33
-    runAsGroup: 33
+    runAsNonRoot: false
+    runAsUser: 0
     seccompProfile:
       type: RuntimeDefault
     appArmorProfile:
