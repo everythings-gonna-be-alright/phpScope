@@ -4,16 +4,6 @@
 
 PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures through [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
 
-## What's new in v0.1.4
-
-- **Safe labels by default.** Only `path` and `uri` are sent to Pyroscope as labels. `qstring`, `cookie` and `ts` (request start time) used to create a series per request, and `cookie` and `qstring` could leak session data, so they are opt-in. Choose labels explicitly with `--sampleLabels` (see [Sample labels](#sample-labels)). **Breaking:** `--phpspyRequestInfo` now defaults to `pu`. The examples raise Pyroscope's active series limit from 5,000 to 50,000.
-- **Token from the environment.** `PHPSCOPE_AUTH_TOKEN` is used when `--auth` is not set, and the Helm example no longer passes the token as a command line argument.
-- **Correct timestamps.** The first sample after an idle period is no longer stamped too early, and an invalid UTF-8 trace no longer drops the whole batch.
-- **Tested end to end.** Unit tests with parser fuzzing, plus an e2e suite on kind that checks WordPress traffic is profiled, timestamps match request times and each endpoint shows its own code. CI runs lint, race tests, `govulncheck`, a Docker build and e2e on every PR, and publishes test reports as artifacts. See [Testing](#testing).
-- **Updated examples.** Pyroscope 2.4.3, Go 1.27.3, WordPress 7.1.4 on PHP 8.5, and hardened Compose and Helm manifests.
-
-See the [CHANGELOG](CHANGELOG.md) for the full list.
-
 ## Features
 
 - Real-time PHP process profiling
