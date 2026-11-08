@@ -79,12 +79,27 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o build/app-linux-arm64
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o build/app-darwin-arm64
 
+      - name: Generate checksums
+        working-directory: build
+        run: sha256sum app-* > SHA256SUMS
+
+      - name: Extract release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            .github/scripts/release-notes.sh "$TAG"
+            printf '\n### 🔐 Verify\n\n```shell\nsha256sum --check --ignore-missing SHA256SUMS\n```\n'
+          } > release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           token: ${{ github.token }}
+          body_path: release-notes.md
           files: |
             build/app-linux-amd64
             build/app-darwin-amd64
             build/app-linux-arm64
             build/app-darwin-arm64
+            build/SHA256SUMS
