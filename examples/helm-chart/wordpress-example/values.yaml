@@ -94,8 +94,8 @@ phpscope:
     # phpspy request info to capture: q=query string, c=cookie, u=uri, p=path.
     requestInfo: "pu"
     # Trace fields sent as per-sample labels. Every distinct value is a new
-    # Pyroscope series (ts is one per request), and cookie/qstring may contain secrets.
-    sampleLabels: "path,uri,ts"
+    # Pyroscope series, and ts/cookie/qstring are per-request or may contain secrets.
+    sampleLabels: "path,uri"
     tags:
       - env=production
       - app=wordpress
