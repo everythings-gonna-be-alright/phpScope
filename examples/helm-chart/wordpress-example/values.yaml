@@ -94,8 +94,8 @@ phpscope:
     # phpspy request info to capture: q=query string, c=cookie, u=uri, p=path.
     requestInfo: "pu"
     # Trace fields sent as per-sample labels. Every distinct value is a new
-    # Pyroscope series, and cookie/qstring may contain secrets.
-    sampleLabels: "path,uri"
+    # Pyroscope series (ts is one per request), and cookie/qstring may contain secrets.
+    sampleLabels: "path,uri,ts"
     tags:
       - env=production
       - app=wordpress
@@ -229,6 +229,7 @@ pyroscope:
     extraArgs:
       log.level: warn
       -usage-stats.enabled: "false"
+      ingester.max-global-series-per-tenant: "50000"
     resources:
       limits:
         cpu: 500m
@@ -239,6 +240,13 @@ pyroscope:
     persistence:
       enabled: false
       size: 10Gi
+    # Pyroscope 2.x creates its compactor directory under /tmp.
+    extraVolumes:
+      - name: tmp
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: tmp
+        mountPath: /tmp
     podSecurityContext:
       fsGroup: 10001
       runAsUser: 10001

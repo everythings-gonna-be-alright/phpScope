@@ -1,12 +1,12 @@
 services:
   pyroscope:
-    image: grafana/pyroscope:1.21.0
+    image: grafana/pyroscope:2.4.3
     ports:
       - "127.0.0.1:4040:4040"
     command:
       - -usage-stats.enabled=false
       - -self-profiling.disable-push=true
-      - -ingester.max-global-series-per-tenant=15000
+      - -ingester.max-global-series-per-tenant=50000
     healthcheck:
       test: ["CMD", "/usr/bin/profilecli", "ready"]
       interval: 5s

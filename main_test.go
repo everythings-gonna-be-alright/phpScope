@@ -96,8 +96,8 @@ func TestParseConfigDefaults(t *testing.T) {
 	if cfg.RateHz != 400 || cfg.Interval != 0.1 || len(cfg.Tags) != 0 || cfg.Debug {
 		t.Errorf("defaults not applied: %+v", cfg)
 	}
-	if !reflect.DeepEqual(cfg.SampleLabels, []string{"path", "uri"}) || cfg.PhpspyRequestInfo != "pu" {
-		t.Errorf("sample labels = %q, request info = %q; want the script path and uri", cfg.SampleLabels, cfg.PhpspyRequestInfo)
+	if !reflect.DeepEqual(cfg.SampleLabels, []string{"path", "uri", "ts"}) || cfg.PhpspyRequestInfo != "pu" {
+		t.Errorf("sample labels = %q, request info = %q; want the script path, uri and ts", cfg.SampleLabels, cfg.PhpspyRequestInfo)
 	}
 }
 

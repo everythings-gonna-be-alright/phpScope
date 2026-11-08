@@ -91,6 +91,33 @@ func TestConvertTracesSameFunctionDifferentLines(t *testing.T) {
 	}
 }
 
+func TestConvertTracesMainFramesIncludeFile(t *testing.T) {
+	start := time.Unix(1700000000, 0)
+	traces := []collector.Trace{
+		trace(start, time.Millisecond, map[string][]string{},
+			collector.StackFrame{Index: 0, Method: "foo", File: "/var/www/html/a.php", StartLine: 3},
+			collector.StackFrame{Index: 1, Method: "<main>", File: "/var/www/html/wp-blog-header.php", StartLine: 0},
+			collector.StackFrame{Index: 2, Method: "<main>", File: "/var/www/html/index.php", StartLine: 0},
+			collector.StackFrame{Index: 3, Method: "Registry::<main>", File: "/var/www/html/r.php", StartLine: 0}),
+	}
+
+	prof := ConvertTracesToPprof(traces, 400, false)
+
+	var got []string
+	for _, f := range prof.Function {
+		got = append(got, f.Name)
+	}
+	want := []string{
+		"foo",
+		"<main> /var/www/html/wp-blog-header.php",
+		"<main> /var/www/html/index.php",
+		"Registry::<main> /var/www/html/r.php",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("function names = %q, want %q", got, want)
+	}
+}
+
 func TestSampleTypeConfigMatchesProfileSampleTypes(t *testing.T) {
 	prof := ConvertTracesToPprof([]collector.Trace{trace(time.Now(), time.Millisecond, nil)}, 400, false)
 	for _, st := range prof.SampleType {

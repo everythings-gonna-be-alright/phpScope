@@ -4,6 +4,16 @@
 
 PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures through [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
 
+## What's new in v0.1.4
+
+- **Safe labels by default.** Only `path`, `uri` and `ts` (request start time) are sent to Pyroscope as labels. `qstring` and `cookie` used to create a series per request and could leak session cookies, so they are opt-in. Choose labels explicitly with `--sampleLabels` (see [Sample labels](#sample-labels)). **Breaking:** `--phpspyRequestInfo` now defaults to `pu`. The examples raise Pyroscope's active series limit from 5,000 to 50,000 to fit the per-request `ts` label.
+- **Token from the environment.** `PHPSCOPE_AUTH_TOKEN` is used when `--auth` is not set, and the Helm example no longer passes the token as a command line argument.
+- **Correct timestamps.** The first sample after an idle period is no longer stamped too early, and an invalid UTF-8 trace no longer drops the whole batch.
+- **Tested end to end.** Unit tests with parser fuzzing, plus an e2e suite on kind that checks WordPress traffic is profiled, timestamps match request times and each endpoint shows its own code. CI runs lint, race tests, `govulncheck`, a Docker build and e2e on every PR, and publishes test reports as artifacts. See [Testing](#testing).
+- **Updated examples.** Pyroscope 2.4.3, Go 1.27.3, WordPress 7.1.4 on PHP 8.5, and hardened Compose and Helm manifests.
+
+See the [CHANGELOG](CHANGELOG.md) for the full list.
+
 ## Features
 
 - Real-time PHP process profiling
@@ -120,11 +130,15 @@ Basic usage example:
 | --phpspyMaxDepth    | -1                        | phpspy max stack depth (-1 = unlimited)           |
 | --phpspyThreads     | 64                        | phpspy threads count                              |
 | --phpspyRequestInfo | pu                        | Request info phpspy captures (q=query string, c=cookie, u=uri, p=path) |
-| --sampleLabels      | path,uri                  | Comma-separated trace fields sent as per-sample labels (`uri`, `path`, `qstring`, `cookie`, `ts`, `mem`) |
+| --sampleLabels      | path,uri,ts               | Comma-separated trace fields sent as per-sample labels (`uri`, `path`, `qstring`, `cookie`, `ts`, `mem`) |
 | --pgrep             | `-x "(php-fpm.*\|^php$)"` | pgrep pattern for finding PHP processes           |
 | --debug             | false                     | Enable debug logging                              |
 
-Each distinct value of a sample label becomes a separate Pyroscope series. `ts` (the request start time) is unique per request, and `uri` and `qstring` usually are too, so enabling them quickly exhausts Pyroscope's active series limit and profiles get rejected. `cookie` and `qstring` can also carry session tokens and other secrets into Pyroscope. Only enable them for short debugging sessions, and enable the matching `--phpspyRequestInfo` letter as well.
+### Sample labels
+
+Labels let you filter and group profiles in Pyroscope. With the defaults, select the application, then add `{uri="/wp-login.php"}` to the query or group by `uri`. Note that `uri` is the script URL (`/index.php`), not the routed page, so frameworks with a front controller show a single value.
+
+Each distinct value of a sample label becomes a separate Pyroscope series, and Pyroscope rejects profiles (HTTP 422) once its active series limit is reached. `ts` (the request start time) is on by default and unique per request, so the series count grows with traffic. The examples raise the limit to 50,000 (`-ingester.max-global-series-per-tenant`, default 5,000); size it for your request rate and retention, and drop `ts` from `--sampleLabels` if you do not need per-request resolution. `uri` and `qstring` can be high-cardinality too. `cookie` and `qstring` can also carry session tokens and other secrets into Pyroscope, so only enable them for short debugging sessions, together with the matching `--phpspyRequestInfo` letter.
 
 ## Example
 
@@ -152,7 +166,16 @@ End-to-end tests build the phpScope image, start a [kind](https://kind.sigs.k8s.
 
    ```shell
    cd e2e
-   go test -tags e2e -v -timeout 30m ./...
+   go test -tags e2e -count=1 -v -timeout 30m ./...
+   ```
+
+Use `-count=1` so Go does not replay a cached result. To open WordPress and Pyroscope from a kept cluster, run with `E2E_KEEP_CLUSTER=1`, then:
+
+   ```shell
+   kind get kubeconfig --name phpscope-test > /tmp/phpscope-test.kubeconfig
+   export KUBECONFIG=/tmp/phpscope-test.kubeconfig
+   kubectl -n phpscope-e2e port-forward svc/wp-pyroscope 4040:4040
+   kubectl -n phpscope-e2e port-forward svc/wp-wordpress-example 8080:8080
    ```
 
 | Variable           | Default         | Description                                        |

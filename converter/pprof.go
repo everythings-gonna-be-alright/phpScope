@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"phpScope/collector"
+	"strings"
 	"time"
 
 	"github.com/google/pprof/profile"
@@ -69,14 +70,15 @@ func ConvertTracesToPprof(traces []collector.Trace, sampleRate int, debug bool) 
 
 		// Convert each stack frame in the trace
 		for _, frame := range trace.Frames {
-			functionKey := frame.Method + frame.File
+			name := frameName(frame)
+			functionKey := name + frame.File
 
 			// Create or reuse function entry
 			if _, exists := functions[functionKey]; !exists {
 				functions[functionKey] = &profile.Function{
 					ID:         nextFuncID,
-					Name:       frame.Method,
-					SystemName: frame.Method,
+					Name:       name,
+					SystemName: name,
 					Filename:   frame.File,
 					StartLine:  int64(frame.StartLine),
 				}
@@ -116,4 +118,14 @@ func ConvertTracesToPprof(traces []collector.Trace, sampleRate int, debug bool) 
 	}
 
 	return prof
+}
+
+// frameName returns the Pyroscope function name. phpspy reports the top-level
+// code of every included file as "<main>", so the file path is appended to
+// keep nested includes distinguishable in the flamegraph.
+func frameName(f collector.StackFrame) string {
+	if strings.HasSuffix(f.Method, "<main>") && f.File != "" {
+		return f.Method + " " + f.File
+	}
+	return f.Method
 }
