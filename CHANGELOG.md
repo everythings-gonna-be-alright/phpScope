@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 📈 Pyroscope in the examples updated from 1.21.0 to 2.4.3 (Compose image and Helm subchart); the chart mounts a writable `/tmp` because 2.x needs it
 - 🔍 Top-level code of included files is shown as `<main> /path/file.php` instead of an identical `<main>`, so nested includes are distinguishable in the flamegraph
 - ⬆️ Go 1.27.3, dependencies updated
-- 🔒 Hardened Docker Compose and Helm examples; WordPress 7.1.4 / PHP 8.5
+- 🔒 The Helm example runs phpScope as non-root (UID 33, all capabilities dropped); verified by the e2e suite. Hardened Docker Compose and Helm examples; WordPress 7.1.4 / PHP 8.5
 
 ### 🐛 Fixed
 - 🧹 Invalid UTF-8 in a trace no longer drops the whole batch (#5)

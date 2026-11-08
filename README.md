@@ -99,7 +99,21 @@ Then open:
 
 ### Run without root
 
-Run PHPScope as a non-root user with every capability dropped except `SYS_PTRACE`, which phpspy needs to read PHP process memory. Use a read-only root filesystem, `no-new-privileges` and the default seccomp profile, as the examples do. ptrace is only allowed towards processes of the same user (or with `SYS_PTRACE` and a permissive Yama `ptrace_scope`), so for a fully rootless setup run PHPScope with the same UID as PHP-FPM. The Compose and Helm examples currently run the PHPScope container as root so they work on any PHP image; switch them to PHP's UID and test on your nodes before relying on it.
+The Helm example runs PHPScope as non-root (UID/GID 33, the same as PHP-FPM's `www-data`) with every capability dropped, a read-only root filesystem, `allowPrivilegeEscalation: false` and the default seccomp profile. phpspy can attach to processes of the same user, so neither root nor `SYS_PTRACE` is needed. The e2e suite runs this configuration and verifies that every request is profiled.
+
+This depends on the node kernel. With `kernel.yama.ptrace_scope` of 1 or higher (the Ubuntu default) a process may only trace its own descendants, so the same-UID sidecar is denied. Either set `ptrace_scope` to 0 on those nodes, or run PHPScope as root with only the `SYS_PTRACE` capability:
+
+   ```yaml
+   phpscope:
+     securityContext:
+       runAsNonRoot: false
+       runAsUser: 0
+       capabilities:
+         drop: [ALL]
+         add: [SYS_PTRACE]
+   ```
+
+If your PHP image does not use UID 33, set `runAsUser` and `runAsGroup` to its UID and GID. The Docker Compose example profiles processes of other containers and host processes, so it keeps `SYS_PTRACE` and runs as root.
 
 ### Verify downloads
 
