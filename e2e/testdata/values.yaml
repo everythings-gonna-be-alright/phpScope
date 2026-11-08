@@ -1,0 +1,15 @@
+ingress:
+  enabled: false
+
+phpscope:
+  image:
+    repository: phpscope
+    tag: e2e
+    pullPolicy: Never
+  config:
+    # qstring and ts identify each request, which the per-request assertions need.
+    requestInfo: "puq"
+    sampleLabels: "path,uri,qstring,ts"
+    tags:
+      - env=e2e
+      - app=wordpress

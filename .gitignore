@@ -3,3 +3,6 @@ phpscope
 
 # OS
 .DS_Store
+
+# Test reports
+reports/

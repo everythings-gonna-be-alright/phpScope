@@ -2,16 +2,18 @@ package processor
 
 import (
 	"phpScope/config"
-	"phpScope/sender"
 
-	"sync"
+	"github.com/google/pprof/profile"
 )
+
+// profileSender transmits a converted profile to the profiling backend.
+type profileSender interface {
+	SendSample(prof *profile.Profile, sampleTypeConfig map[string]map[string]interface{}) error
+}
 
 // Processor handles the collection and processing of PHP profiling data.
 // It manages the lifecycle of trace collection, batching, and sending to Pyroscope.
 type Processor struct {
-	config     *config.Config
-	sender     *sender.Sender
-	bulkAmount int        // Current number of traces in the batch
-	mu         sync.Mutex // Mutex for thread-safe counter updates
+	config *config.Config
+	sender profileSender
 }

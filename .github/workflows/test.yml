@@ -1,0 +1,196 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  COVERAGE_MIN: "70"
+  GOTESTSUM: gotest.tools/gotestsum@v1.13.0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::Files not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: |
+          mkdir -p reports
+          go run "$GOTESTSUM" --format testname \
+            --junitfile reports/unit-junit.xml --jsonfile reports/unit.json \
+            -- -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      - name: Enforce coverage floor
+        run: |
+          go tool cover -html=coverage.out -o reports/coverage.html
+          cp coverage.out reports/
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ { sub(/%/, "", $3); print $3 }')
+          echo "### Coverage: ${total}% (minimum ${COVERAGE_MIN}%)" >> "$GITHUB_STEP_SUMMARY"
+          awk -v t="$total" -v min="$COVERAGE_MIN" 'BEGIN { if (t + 0 < min + 0) { printf "::error::Coverage %s%% is below %s%%\n", t, min; exit 1 } }'
+
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        run: .github/scripts/test-summary.sh "Unit tests" reports/unit.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: unit-test-report
+          path: reports/
+          retention-days: 14
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          install-mode: goinstall
+
+      - name: golangci-lint (e2e)
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          install-mode: goinstall
+          working-directory: e2e
+          args: --build-tags=e2e
+
+  vuln:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+      - name: govulncheck (e2e)
+        working-directory: e2e
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -tags e2e ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  e2e:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KIND_VERSION: v0.33.0
+      KIND_SHA256: aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: e2e/go.mod
+          cache-dependency-path: e2e/go.sum
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.1
+
+      - name: Install kind
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSLo "$RUNNER_TEMP/bin/kind" "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          echo "${KIND_SHA256}  $RUNNER_TEMP/bin/kind" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/kind"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Vet
+        working-directory: e2e
+        run: go vet -tags e2e ./...
+
+      - name: Run e2e tests
+        working-directory: e2e
+        env:
+          E2E_LOGS_DIR: ${{ runner.temp }}/e2e-logs
+        run: |
+          kind version
+          helm version --short
+          mkdir -p reports
+          go run "$GOTESTSUM" --format standard-verbose \
+            --junitfile reports/e2e-junit.xml --jsonfile reports/e2e.json \
+            -- -tags e2e -count=1 -timeout 25m ./...
+
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        run: .github/scripts/test-summary.sh "E2E tests" e2e/reports/e2e.json >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: e2e-test-report
+          path: e2e/reports/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: e2e-cluster-logs
+          path: ${{ runner.temp }}/e2e-logs
+          retention-days: 7

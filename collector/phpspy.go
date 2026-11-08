@@ -3,6 +3,7 @@ package collector
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os/exec"
 	"phpScope/config"
@@ -12,26 +13,56 @@ import (
 	"time"
 )
 
+const maxLineSize = 1024 * 1024
+
+// Regular expressions for parsing different line formats
+var (
+	frameRegex = regexp.MustCompile(`^(\d+)\s+(.+)\s+([^:]+):(-?\d+)$`) // Matches stack frame lines
+	tagRegex   = regexp.MustCompile(`^#\s*(\w+)\s*=\s*(.+)$`)           // Matches general tag lines
+	memRegex   = regexp.MustCompile(`^#\s*mem\s+(\d+)\s+(\d+)$`)        // Matches memory usage lines
+)
+
 // New creates a new PhpSpy instance with the provided configuration
 func New(cfg *config.Config) *PhpSpy {
-	return &PhpSpy{
-		config:  cfg,
-		traces:  make(chan *Trace, cfg.BatchLimit*2),
-		stopped: make(chan struct{}),
+	ps := &PhpSpy{
+		config:       cfg,
+		sampleLabels: make(map[string]bool, len(cfg.SampleLabels)),
+		traces:       make(chan *Trace, cfg.BatchLimit*2),
+		stopped:      make(chan struct{}),
+	}
+	for _, l := range cfg.SampleLabels {
+		ps.sampleLabels[l] = true
+	}
+
+	if cfg.ExcludePattern != "" {
+		re, err := regexp.Compile(cfg.ExcludePattern)
+		if err != nil {
+			log.Printf("Warning: invalid exclude pattern: %v\n", err)
+		} else {
+			ps.excludeRegex = re
+		}
+	}
+
+	return ps
+}
+
+// phpspyArgs builds the phpspy argument list. Arguments are passed directly to
+// exec, never through a shell, so config values cannot inject commands.
+func (ps *PhpSpy) phpspyArgs() []string {
+	return []string{
+		fmt.Sprintf("--rate-hz=%d", ps.config.RateHz),
+		"--pgrep=" + ps.config.PhpspyPgrep,
+		fmt.Sprintf("--buffer-size=%d", ps.config.PhpspyBufferSize),
+		fmt.Sprintf("--max-depth=%d", ps.config.PhpspyMaxDepth),
+		fmt.Sprintf("--threads=%d", ps.config.PhpspyThreads),
+		"--request-info=" + ps.config.PhpspyRequestInfo,
 	}
 }
 
 // Start begins collecting PHP stack traces using phpspy
 // Returns a channel that will receive parsed traces and any error that occurred
 func (ps *PhpSpy) Start() (<-chan *Trace, error) {
-	// Construct phpspy command with configuration parameters
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("phpspy --rate-hz=%d --pgrep='%s' --buffer-size=%d --max-depth=%d --threads=%d --request-info=%s",
-		ps.config.RateHz,
-		ps.config.PhpspyPgrep,
-		ps.config.PhpspyBufferSize,
-		ps.config.PhpspyMaxDepth,
-		ps.config.PhpspyThreads,
-		ps.config.PhpspyRequestInfo))
+	cmd := exec.Command("phpspy", ps.phpspyArgs()...) //nolint:gosec // G204: fixed binary, args passed without a shell
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -40,59 +71,88 @@ func (ps *PhpSpy) Start() (<-chan *Trace, error) {
 
 	log.Printf("Starting process: %v\n", cmd.String())
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("error starting sh: %v", err)
+		return nil, fmt.Errorf("error starting phpspy: %v", err)
 	}
 
 	go func() {
-		// Monitor phpspy process for errors
-		err := cmd.Wait()
-		if err != nil {
+		defer close(ps.traces)
+		ps.readTraces(stdout)
+		// Wait closes the pipe, so it must only run after all output is read.
+		if err := cmd.Wait(); err != nil {
 			log.Fatalf("phpspy process exited with error: %v", err)
 		}
 	}()
 
+	return ps.traces, nil
+}
+
+// Read parses phpspy output from r in the background and returns the channel
+// of parsed traces. The channel is closed when r is exhausted.
+func (ps *PhpSpy) Read(r io.Reader) <-chan *Trace {
 	go func() {
 		defer close(ps.traces)
-		scanner := bufio.NewScanner(stdout)
-		var currentTrace []string
-		var lastTraceTime time.Time
-		firstTrace := true
-
-		// Process phpspy output line by line
-		for scanner.Scan() {
-			if firstTrace {
-				lastTraceTime = time.Now()
-			}
-
-			line := strings.TrimSpace(scanner.Text())
-
-			// Empty line indicates end of current trace
-			if line == "" {
-				if len(currentTrace) > 0 {
-					trace, err := ps.parseTrace(currentTrace)
-					if err == nil {
-						trace.TsEndProcessing = time.Now()
-						if !lastTraceTime.IsZero() {
-							trace.TsStartProcessing = lastTraceTime
-						}
-						lastTraceTime = trace.TsEndProcessing
-						ps.traces <- trace
-					} else {
-						log.Printf("Error parsing trace: %v\n", err)
-					}
-					currentTrace = nil
-				} else {
-					firstTrace = true
-				}
-				continue
-			}
-
-			currentTrace = append(currentTrace, line)
-			firstTrace = false
-		}
+		ps.readTraces(r)
 	}()
+	return ps.traces
+}
 
-	return ps.traces, nil
+// readTraces parses phpspy output line by line until r is exhausted,
+// sending each completed trace to ps.traces.
+func (ps *PhpSpy) readTraces(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
+	var currentTrace []string
+	var lastTraceTime time.Time
+	firstTrace := true
+	period := ps.samplePeriod()
+
+	for scanner.Scan() {
+		if firstTrace {
+			lastTraceTime = time.Now()
+		}
+
+		line := strings.TrimSpace(scanner.Text())
+
+		// Empty line indicates end of current trace
+		if line == "" {
+			if len(currentTrace) > 0 {
+				trace, err := ps.parseTrace(currentTrace)
+				if err == nil {
+					trace.TsEndProcessing = time.Now()
+					if !lastTraceTime.IsZero() {
+						trace.TsStartProcessing = lastTraceTime
+					}
+					// After an idle gap the previous trace is stale; a single sample
+					// never covers more than one sampling period.
+					if earliest := trace.TsEndProcessing.Add(-period); period > 0 && trace.TsStartProcessing.Before(earliest) {
+						trace.TsStartProcessing = earliest
+					}
+					lastTraceTime = trace.TsEndProcessing
+					ps.traces <- trace
+				} else {
+					log.Printf("Error parsing trace: %v\n", err)
+				}
+				currentTrace = nil
+			} else {
+				firstTrace = true
+			}
+			continue
+		}
+
+		currentTrace = append(currentTrace, line)
+		firstTrace = false
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading phpspy output: %v\n", err)
+	}
+}
+
+// samplePeriod is the interval between phpspy samples, or 0 if no rate is set.
+func (ps *PhpSpy) samplePeriod() time.Duration {
+	if ps.config.RateHz <= 0 {
+		return 0
+	}
+	return time.Second / time.Duration(ps.config.RateHz)
 }
 
 // parseTrace processes a slice of strings representing a single stack trace
@@ -103,27 +163,12 @@ func (ps *PhpSpy) parseTrace(traces []string) (*Trace, error) {
 		Tags:   make(map[string][]string),
 	}
 
-	// Regular expressions for parsing different line formats
-	frameRegex := regexp.MustCompile(`^(\d+)\s+(.+)\s+([^:]+):(-?\d+)$`) // Matches stack frame lines
-	tagRegex := regexp.MustCompile(`^#\s*(\w+)\s*=\s*(.+)$`)             // Matches general tag lines
-	memRegex := regexp.MustCompile(`^#\s*mem\s+(\d+)\s+(\d+)$`)          // Matches memory usage lines
-
-	// Compile exclude pattern if configured
-	var excludeRegex *regexp.Regexp
-	if ps.config.ExcludePattern != "" {
-		var err error
-		excludeRegex, err = regexp.Compile(ps.config.ExcludePattern)
-		if err != nil {
-			log.Printf("Warning: invalid exclude pattern: %v\n", err)
-		}
-	}
-
 	// Process each line of the trace
 	for _, line := range traces {
 		line = strings.ToValidUTF8(line, "\uFFFD")
 		if matches := frameRegex.FindStringSubmatch(line); matches != nil {
 			// Skip frames matching exclude pattern
-			if excludeRegex != nil && excludeRegex.MatchString(line) {
+			if ps.excludeRegex != nil && ps.excludeRegex.MatchString(line) {
 				continue
 			}
 
@@ -139,10 +184,14 @@ func (ps *PhpSpy) parseTrace(traces []string) (*Trace, error) {
 			trace.Frames = append(trace.Frames, frame)
 		} else if matches := memRegex.FindStringSubmatch(line); matches != nil {
 			// Parse memory usage information
-			trace.Tags["mem"] = []string{matches[1] + " " + matches[2]}
+			if ps.sampleLabels["mem"] {
+				trace.Tags["mem"] = []string{matches[1] + " " + matches[2]}
+			}
 		} else if matches := tagRegex.FindStringSubmatch(line); matches != nil {
 			// Parse general tag information
-			trace.Tags[matches[1]] = []string{matches[2]}
+			if ps.sampleLabels[matches[1]] {
+				trace.Tags[matches[1]] = []string{matches[2]}
+			}
 		}
 	}
 

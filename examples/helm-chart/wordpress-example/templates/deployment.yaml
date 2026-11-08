@@ -26,7 +26,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "wordpress-example.serviceAccountName" . }}
-      shareProcessNamespace: true
+      automountServiceAccountToken: false
+      shareProcessNamespace: {{ .Values.shareProcessNamespace }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       terminationGracePeriodSeconds: 30
@@ -35,23 +36,18 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command:
-            - sh
-            - -c
-            - cp -r /usr/src/wordpress/. /var/www/html/ && chown -R 33:33 /var/www/html/
+            - cp
+            - -R
+            - /usr/src/wordpress/.
+            - /var/www/html/
           securityContext:
-            capabilities:
-              drop: [ALL]
-              add: [CHOWN, FOWNER, DAC_OVERRIDE]
-            readOnlyRootFilesystem: false
-            allowPrivilegeEscalation: false
-            runAsNonRoot: false
-            runAsUser: 0
+            {{- toYaml .Values.phpSecurityContext | nindent 12 }}
           volumeMounts:
             - name: wordpress-files
               mountPath: /var/www/html
         {{- if .Values.mysql.enabled }}
         - name: wait-for-mysql
-          image: busybox:1.36
+          image: busybox:1.38.0
           command:
             - sh
             - -c
@@ -91,6 +87,10 @@ spec:
             - name: fpm
               containerPort: 9000
               protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: fpm
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
@@ -104,6 +104,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: http
+            {{- toYaml (omit .Values.readinessProbe "path") | nindent 12 }}
           resources:
             {{- toYaml .Values.nginx.resources | nindent 12 }}
           volumeMounts:
@@ -112,9 +117,9 @@ spec:
             - name: nginx-config
               mountPath: /etc/nginx/conf.d
             - name: nginx-tmp
+              mountPath: /tmp
+            - name: nginx-cache
               mountPath: /var/cache/nginx
-            - name: nginx-tmp
-              mountPath: /var/run
         - name: phpscope
           securityContext:
             {{- toYaml .Values.phpscope.securityContext | nindent 12 }}
@@ -125,10 +130,6 @@ spec:
             - $(PHPSCOPE_PYROSCOPE_URL)
             - -appName
             - $(PHPSCOPE_APP_NAME)
-            {{- if .Values.phpscope.config.authToken }}
-            - -auth
-            - $(PHPSCOPE_AUTH_TOKEN)
-            {{- end }}
             - -rateHz
             - "{{ .Values.phpscope.config.rateHz }}"
             - -interval
@@ -141,6 +142,10 @@ spec:
             {{- end }}
             - -pgrep
             - {{ .Values.phpscope.config.pgrepPattern | quote }}
+            - -phpspyRequestInfo
+            - {{ .Values.phpscope.config.requestInfo | quote }}
+            - -sampleLabels
+            - {{ .Values.phpscope.config.sampleLabels | quote }}
             {{- range .Values.phpscope.config.tags }}
             - -tags
             - {{ . | quote }}
@@ -184,6 +189,8 @@ spec:
           configMap:
             name: {{ include "wordpress-example.fullname" . }}-nginx
         - name: nginx-tmp
+          emptyDir: {}
+        - name: nginx-cache
           emptyDir: {}
         - name: tmp
           emptyDir: {}

@@ -1,0 +1,9 @@
+# Builds phpScope from this repository instead of pulling the published image:
+#   docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d --build
+services:
+  phpscope:
+    image: phpscope:local
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    pull_policy: build

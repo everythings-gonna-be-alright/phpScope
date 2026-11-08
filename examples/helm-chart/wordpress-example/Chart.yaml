@@ -3,7 +3,7 @@ name: wordpress-example
 description: WordPress + MySQL + phpScope profiling sidecar + Grafana Pyroscope
 type: application
 version: 0.1.0
-appVersion: "php8.3-apache"
+appVersion: "7.1.4-php8.5-fpm"
 keywords:
   - wordpress
   - mysql
@@ -14,6 +14,6 @@ maintainers:
   - name: everything-gonna-be-alright
 dependencies:
   - name: pyroscope
-    version: "1.21.0"
+    version: "2.4.3"
     repository: "https://grafana.github.io/helm-charts"
     condition: pyroscope.enabled
