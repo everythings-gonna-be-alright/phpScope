@@ -69,6 +69,9 @@ echo "requests=$n"
 // Profiles are batched every ~100ms and queried at 100ms resolution.
 const timeSlack = time.Second
 
+// Window after the test starts in which phpScope send errors are ignored.
+const sendGrace = 30 * time.Second
+
 // Some requests are legitimately unprofiled: a request shorter than a few
 // sampling periods can fall between samples, and phpspy's --pgrep mode rescans
 // for new PHP-FPM workers only every 2s, so a freshly spawned worker is blind
@@ -339,9 +342,10 @@ func TestWordPressProfiling(t *testing.T) {
 				if logs := containerLogs(ctx, t, cfg, pod.Name, "phpscope", time.Time{}); !phpspyRunningRe.MatchString(logs) {
 					t.Errorf("phpspy was not started:\n%s", logs)
 				}
-				// Sends can fail while Pyroscope is still starting; only errors
-				// after the release reported ready count.
-				logs := containerLogs(ctx, t, cfg, pod.Name, "phpscope", testStart)
+				// A send that began while Pyroscope was still starting can fail
+				// after the release reported ready (dial timeouts take seconds),
+				// so errors only count once sendGrace has passed.
+				logs := containerLogs(ctx, t, cfg, pod.Name, "phpscope", testStart.Add(sendGrace))
 				for _, line := range strings.Split(logs, "\n") {
 					if logErrorRe.MatchString(line) {
 						t.Errorf("phpscope logged an error: %s", line)

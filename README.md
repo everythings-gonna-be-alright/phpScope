@@ -4,16 +4,6 @@
 
 PHPScope is a PHP profiling tool based on [phpspy](https://github.com/adsr/phpspy) that integrates with Pyroscope to provide continuous profiling for PHP applications. It captures through [phpspy](https://github.com/adsr/phpspy) PHP-FPM and PHP CLI processes performance data and sends it to a Pyroscope server for visualization and analysis.
 
-## What's new in v0.1.4
-
-- **Safe labels by default.** Only `path` and `uri` are sent to Pyroscope as labels. `qstring`, `cookie` and `ts` (request start time) used to create a series per request, and `cookie` and `qstring` could leak session data, so they are opt-in. Choose labels explicitly with `--sampleLabels` (see [Sample labels](#sample-labels)). **Breaking:** `--phpspyRequestInfo` now defaults to `pu`. The examples raise Pyroscope's active series limit from 5,000 to 50,000.
-- **Token from the environment.** `PHPSCOPE_AUTH_TOKEN` is used when `--auth` is not set, and the Helm example no longer passes the token as a command line argument.
-- **Correct timestamps.** The first sample after an idle period is no longer stamped too early, and an invalid UTF-8 trace no longer drops the whole batch.
-- **Tested end to end.** Unit tests with parser fuzzing, plus an e2e suite on kind that checks WordPress traffic is profiled, timestamps match request times and each endpoint shows its own code. CI runs lint, race tests, `govulncheck`, a Docker build and e2e on every PR, and publishes test reports as artifacts. See [Testing](#testing).
-- **Updated examples.** Pyroscope 2.4.3, Go 1.27.3, WordPress 7.1.4 on PHP 8.5, and hardened Compose and Helm manifests.
-
-See the [CHANGELOG](CHANGELOG.md) for the full list.
-
 ## Features
 
 - Real-time PHP process profiling
@@ -104,6 +94,49 @@ Then open:
    cd phpscope
    go build
    ```
+
+## Security recommendations
+
+### Run with minimal privileges
+
+PHPScope needs to ptrace the PHP-FPM workers. The Helm example runs it as root with every capability dropped except `SYS_PTRACE`, a read-only root filesystem, `allowPrivilegeEscalation: false` and the default seccomp profile. This works on every kernel.
+
+A non-root setup is possible when the PHPScope sidecar uses the same UID/GID as PHP-FPM (`www-data` is 33 in the official images) and the node allows same-user tracing, that is `kernel.yama.ptrace_scope=0`:
+
+   ```yaml
+   phpscope:
+     securityContext:
+       runAsNonRoot: true
+       runAsUser: 33
+       runAsGroup: 33
+       capabilities:
+         drop: [ALL]
+   ```
+
+This was verified with the e2e suite on a kind cluster on Docker Desktop (all requests profiled). It does not work where `ptrace_scope` is 1 or higher, which is the Ubuntu default and what GitHub-hosted runners use: phpspy is denied, nothing is profiled and phpScope logs no error. Unprivileged containers cannot gain `SYS_PTRACE` as an effective capability, so there is no non-root option on those nodes unless you set `ptrace_scope` to 0. Check `sysctl kernel.yama.ptrace_scope` on your nodes before switching. The Docker Compose example profiles processes of other containers and the host, so it keeps `SYS_PTRACE` and runs as root.
+
+### Verify downloads
+
+Every release publishes a `SHA256SUMS` file next to the binaries. Check the binary before running it:
+
+   ```shell
+   VERSION=v0.1.4
+   BASE=https://github.com/everythings-gonna-be-alright/phpScope/releases/download/$VERSION
+   curl -fsSLO $BASE/app-linux-amd64
+   curl -fsSLO $BASE/SHA256SUMS
+   sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+   ```
+
+### Mirror images for production
+
+For critical production, do not pull `hiload/phpscope` straight from Docker Hub. Copy a released version to your own registry, pin it by digest, and scan it with your usual tools:
+
+   ```shell
+   crane copy docker.io/hiload/phpscope:v0.1.4 registry.example.com/mirror/phpscope:v0.1.4
+   crane digest registry.example.com/mirror/phpscope:v0.1.4
+   ```
+
+`crane copy` keeps the multi-platform manifest. Reference the image as `registry.example.com/mirror/phpscope:v0.1.4@sha256:<digest>` so Kubernetes pulls exactly the image you reviewed. The same applies to the Pyroscope and PHP images used next to it.
 
 ## Usage
 
