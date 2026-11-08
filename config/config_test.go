@@ -18,7 +18,7 @@ func TestNewDefault(t *testing.T) {
 	if c.RateHz != 400 || c.Interval != 0.1 || c.BatchLimit != 50000 || c.ConcurrentLimit != 1 {
 		t.Errorf("unexpected profiling defaults: %+v", c)
 	}
-	if c.PhpspyBufferSize != 131072 || c.PhpspyMaxDepth != -1 || c.PhpspyThreads != 64 || c.PhpspyRequestInfo != "p" {
+	if c.PhpspyBufferSize != 131072 || c.PhpspyMaxDepth != -1 || c.PhpspyThreads != 64 || c.PhpspyRequestInfo != "pu" {
 		t.Errorf("unexpected phpspy defaults: %+v", c)
 	}
 	if c.PhpspyPgrep != `-x "(php-fpm.*|^php$)"` {

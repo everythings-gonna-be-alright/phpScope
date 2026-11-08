@@ -49,11 +49,11 @@ func NewDefault() *Config {
 		Interval:          0.1,
 		BatchLimit:        50000,
 		ConcurrentLimit:   1,
-		SampleLabels:      []string{"path"},
+		SampleLabels:      []string{"path", "uri"},
 		PhpspyBufferSize:  131072,
 		PhpspyMaxDepth:    -1,
 		PhpspyThreads:     64,
-		PhpspyRequestInfo: "p",
+		PhpspyRequestInfo: "pu",
 		PhpspyPgrep:       `-x "(php-fpm.*|^php$)"`,
 	}
 }

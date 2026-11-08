@@ -98,7 +98,11 @@ var endpoints = []struct {
 const maxMislabeledShare = 0.01
 
 // Trace fields left out of sampleLabels in testdata/values.yaml.
-var disallowedLabels = []string{"cookie", "uri", "mem"}
+var disallowedLabels = []string{"cookie", "mem"}
+
+// Script URLs WordPress serves in this test. PHP-FPM reports the script URL,
+// not the routed one, so every front-controller page is /index.php.
+var scriptURIs = []string{"/index.php", "/wp-login.php", "/wp-admin/install.php"}
 
 // Frames that mean WordPress failed while serving traffic.
 var errorFunctions = []string{"wpdb::print_error", "wp_die"}
@@ -153,6 +157,36 @@ func TestWordPressProfiling(t *testing.T) {
 			for _, l := range disallowedLabels {
 				if slices.Contains(names, l) {
 					t.Errorf("label %q is not in sampleLabels but was sent to Pyroscope; labels: %s", l, join(names))
+				}
+			}
+
+			uris, err := labelValues(ctx, t, cfg, "uri", from, time.Now())
+			if err != nil {
+				t.Fatalf("uri values: %v", err)
+			}
+			for _, u := range uris {
+				if !slices.Contains(scriptURIs, u) {
+					t.Errorf("unexpected uri %q; a growing uri set means a series per request: %s", u, join(uris))
+				}
+			}
+			for _, u := range []string{"/index.php", "/wp-login.php"} {
+				if !slices.Contains(uris, u) {
+					t.Errorf("uri %q missing from %s", u, join(uris))
+				}
+			}
+
+			byURI := []struct{ uri, want, notWant string }{
+				{"/wp-login.php", "login_header", "get_home_template"},
+				{"/index.php", "get_home_template", "login_header"},
+			}
+			for _, c := range byURI {
+				sel := strings.TrimSuffix(selector, "}") + fmt.Sprintf(`,uri=%q}`, c.uri)
+				fg, err := mergedFlamegraph(ctx, t, cfg, samplesProfile, sel, trafficStart, time.Now())
+				if err != nil {
+					t.Fatalf("filter uri=%s: %v", c.uri, err)
+				}
+				if fg.Samples[c.want] == 0 || fg.Samples[c.notWant] != 0 {
+					t.Errorf("filter uri=%s: %s=%d (want > 0), %s=%d (want 0)", c.uri, c.want, fg.Samples[c.want], c.notWant, fg.Samples[c.notWant])
 				}
 			}
 			return ctx

@@ -8,8 +8,8 @@ phpscope:
     pullPolicy: Never
   config:
     # qstring and ts identify each request, which the per-request assertions need.
-    requestInfo: "pq"
-    sampleLabels: "path,qstring,ts"
+    requestInfo: "puq"
+    sampleLabels: "path,uri,qstring,ts"
     tags:
       - env=e2e
       - app=wordpress

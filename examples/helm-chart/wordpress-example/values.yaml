@@ -92,10 +92,10 @@ phpscope:
     excludePattern: ""
     pgrepPattern: '-x "php-fpm.*"'
     # phpspy request info to capture: q=query string, c=cookie, u=uri, p=path.
-    requestInfo: "p"
+    requestInfo: "pu"
     # Trace fields sent as per-sample labels. Every distinct value is a new
     # Pyroscope series, and cookie/qstring may contain secrets.
-    sampleLabels: "path"
+    sampleLabels: "path,uri"
     tags:
       - env=production
       - app=wordpress

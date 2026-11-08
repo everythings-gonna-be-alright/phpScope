@@ -119,8 +119,8 @@ Basic usage example:
 | --phpspyBufferSize  | 131072                    | phpspy buffer size                                |
 | --phpspyMaxDepth    | -1                        | phpspy max stack depth (-1 = unlimited)           |
 | --phpspyThreads     | 64                        | phpspy threads count                              |
-| --phpspyRequestInfo | p                         | Request info phpspy captures (q=query string, c=cookie, u=uri, p=path) |
-| --sampleLabels      | path                      | Comma-separated trace fields sent as per-sample labels (`uri`, `path`, `qstring`, `cookie`, `ts`, `mem`) |
+| --phpspyRequestInfo | pu                        | Request info phpspy captures (q=query string, c=cookie, u=uri, p=path) |
+| --sampleLabels      | path,uri                  | Comma-separated trace fields sent as per-sample labels (`uri`, `path`, `qstring`, `cookie`, `ts`, `mem`) |
 | --pgrep             | `-x "(php-fpm.*\|^php$)"` | pgrep pattern for finding PHP processes           |
 | --debug             | false                     | Enable debug logging                              |
 

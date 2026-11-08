@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests for all packages (>90% coverage), including parser fuzzing
 - End-to-end tests on kind: WordPress + phpScope + Pyroscope, checking per-request coverage, timestamps and per-endpoint stacks
 - CI test workflow on every PR (lint, race tests, govulncheck, Docker build, e2e) with test reports as artifacts; releases now require it
-- `--sampleLabels` flag to choose which trace fields become Pyroscope labels (default: `path`)
+- `--sampleLabels` flag to choose which trace fields become Pyroscope labels (default: `path,uri`)
 - Config validation, Dependabot, `docker-compose.build.yaml`
 
 ### Changed
-- **Breaking:** only `path` is sent as a label by default (`--phpspyRequestInfo` now defaults to `p`). Before, `uri`, `qstring`, `cookie` and `ts` created a series per request and leaked cookies. Opt back in with `--phpspyRequestInfo` and `--sampleLabels`.
+- **Breaking:** only `path` and `uri` are sent as labels by default (`--phpspyRequestInfo` now defaults to `pu`). Before, `qstring`, `cookie` and `ts` created a series per request and leaked cookies. Opt back in with `--phpspyRequestInfo` and `--sampleLabels`.
 - The Pyroscope token is read from `PHPSCOPE_AUTH_TOKEN` when `--auth` is not set, and the Helm chart no longer passes it as an argument (arguments are visible in the process list)
 - Go 1.27.3, dependencies updated
 - Hardened Docker Compose and Helm examples; WordPress 7.1.4 / PHP 8.5
