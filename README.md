@@ -95,6 +95,35 @@ Then open:
    go build
    ```
 
+## Security recommendations
+
+### Run without root
+
+Run PHPScope as a non-root user with every capability dropped except `SYS_PTRACE`, which phpspy needs to read PHP process memory. Use a read-only root filesystem, `no-new-privileges` and the default seccomp profile, as the examples do. ptrace is only allowed towards processes of the same user (or with `SYS_PTRACE` and a permissive Yama `ptrace_scope`), so for a fully rootless setup run PHPScope with the same UID as PHP-FPM. The Compose and Helm examples currently run the PHPScope container as root so they work on any PHP image; switch them to PHP's UID and test on your nodes before relying on it.
+
+### Verify downloads
+
+Every release publishes a `SHA256SUMS` file next to the binaries. Check the binary before running it:
+
+   ```shell
+   VERSION=v0.1.4
+   BASE=https://github.com/everythings-gonna-be-alright/phpScope/releases/download/$VERSION
+   curl -fsSLO $BASE/app-linux-amd64
+   curl -fsSLO $BASE/SHA256SUMS
+   sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+   ```
+
+### Mirror images for production
+
+For critical production, do not pull `hiload/phpscope` straight from Docker Hub. Copy a released version to your own registry, pin it by digest, and scan it with your usual tools:
+
+   ```shell
+   crane copy docker.io/hiload/phpscope:v0.1.4 registry.example.com/mirror/phpscope:v0.1.4
+   crane digest registry.example.com/mirror/phpscope:v0.1.4
+   ```
+
+`crane copy` keeps the multi-platform manifest. Reference the image as `registry.example.com/mirror/phpscope:v0.1.4@sha256:<digest>` so Kubernetes pulls exactly the image you reviewed. The same applies to the Pyroscope and PHP images used next to it.
+
 ## Usage
 
 Basic usage example:
