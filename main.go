@@ -11,6 +11,11 @@ import (
 	"strings"
 )
 
+// authTokenEnv names the environment variable used when --auth is not set.
+// Unlike command line arguments, it is not readable by other users in the
+// shared process namespace of a pod.
+const authTokenEnv = "PHPSCOPE_AUTH_TOKEN" //nolint:gosec // G101: name of the variable, not a credential
+
 func printWelcomeBanner(pyroscopeURL, appName string, rateHz int, interval float64, batchLimit int, concurrentLimit int, tags map[string]string, sampleLabels []string, excludePattern string, pgrepPattern string, debug bool) {
 
 	bannerLines := []string{
@@ -83,7 +88,7 @@ func parseConfig(args []string) (*config.Config, error) {
 
 	// Command line flags configuration
 	fs.StringVar(&cfg.PyroscopeURL, "pyroscopeUrl", "", "URL of the Pyroscope server")
-	fs.StringVar(&cfg.AuthToken, "auth", "", "Authentication token for Pyroscope")
+	fs.StringVar(&cfg.AuthToken, "auth", "", "Authentication token for Pyroscope (visible in the process list; prefer the "+authTokenEnv+" environment variable)")
 	fs.StringVar(&cfg.AppName, "appName", "", "Application name for profiling data")
 	fs.StringVar(&cfg.ExcludePattern, "exclude", "", "Regex pattern to exclude functions")
 
@@ -109,6 +114,10 @@ func parseConfig(args []string) (*config.Config, error) {
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
+	}
+
+	if cfg.AuthToken == "" {
+		cfg.AuthToken = os.Getenv(authTokenEnv)
 	}
 
 	cfg.Tags = make(map[string]string, len(tags))

@@ -101,6 +101,27 @@ func TestParseConfigDefaults(t *testing.T) {
 	}
 }
 
+func TestParseConfigAuthTokenFromEnv(t *testing.T) {
+	base := []string{"--pyroscopeUrl=http://p:4040", "--appName=a"}
+
+	t.Setenv(authTokenEnv, "from-env")
+	cfg, err := parseConfig(base)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuthToken != "from-env" {
+		t.Errorf("token = %q, want the environment value", cfg.AuthToken)
+	}
+
+	cfg, err = parseConfig(append(base, "--auth=from-flag"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AuthToken != "from-flag" {
+		t.Errorf("token = %q, want the flag to override the environment", cfg.AuthToken)
+	}
+}
+
 func TestParseConfigEmptySampleLabels(t *testing.T) {
 	cfg, err := parseConfig([]string{"--pyroscopeUrl=http://p:4040", "--appName=a", "--sampleLabels="})
 	if err != nil {

@@ -108,7 +108,7 @@ Basic usage example:
 | Option              | Default                   | Description                                       |
 |---------------------|---------------------------|---------------------------------------------------|
 | --pyroscopeUrl      | required                  | URL of the Pyroscope server                       |
-| --auth              | ""                        | Pyroscope authentication token                    |
+| --auth              | ""                        | Pyroscope authentication token. Falls back to the `PHPSCOPE_AUTH_TOKEN` environment variable, which is preferred because command line arguments are visible in the process list |
 | --appName           | required                  | Application name for profiling                    |
 | --rateHz            | 400                       | Sample rate in Hz                                 |
 | --interval          | 0.1                       | Maximum time between requests to Pyroscope server |
